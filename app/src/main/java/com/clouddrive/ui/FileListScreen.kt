@@ -1,8 +1,13 @@
 package com.clouddrive.ui
 
+import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Environment
+import android.os.Build
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -48,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -61,9 +67,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3FileItem
 import com.clouddrive.s3.S3Repository
+import com.clouddrive.service.ACTION_TRANSFER_COMPLETE
+import com.clouddrive.service.TransferService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,35 +112,52 @@ fun FileListScreen(
         }
     }
 
+    // Listen for transfer completion broadcasts to refresh the file list
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                loadFiles()
+            }
+        }
+        val filter = IntentFilter(ACTION_TRANSFER_COMPLETE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
     LaunchedEffect(currentPrefix) {
         loadFiles()
+    }
+
+    // Request notification permission on Android 13+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            isLoading = true
-            try {
-                val fileName = getFileName(context, uri) ?: "arquivo_${System.currentTimeMillis()}"
-                val key = currentPrefix + fileName
-                val contentType = context.contentResolver.getType(uri)
-                val inputStream = context.contentResolver.openInputStream(uri)
-                    ?: throw Exception("Nao foi possivel ler o arquivo")
-
-                withContext(Dispatchers.IO) {
-                    repository.uploadFile(key, inputStream, contentType)
-                    inputStream.close()
-                }
-                Toast.makeText(context, "Upload concluido: $fileName", Toast.LENGTH_SHORT).show()
-                loadFiles()
-            } catch (e: Exception) {
-                Toast.makeText(context, "Erro no upload: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                isLoading = false
-            }
-        }
+        val fileName = getFileName(context, uri) ?: "arquivo_${System.currentTimeMillis()}"
+        val intent = TransferService.uploadIntent(context, uri, currentPrefix, fileName, config)
+        context.startForegroundService(intent)
+        Toast.makeText(context, "Upload iniciado: $fileName", Toast.LENGTH_SHORT).show()
     }
 
     Scaffold(
@@ -250,31 +276,15 @@ fun FileListScreen(
                                     currentPrefix = file.key
                                 },
                                 onDownload = {
-                                    scope.launch {
-                                        isLoading = true
-                                        try {
-                                            val dest = File(
-                                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                                                "CloudDriveS3/${file.fileName}"
-                                            )
-                                            withContext(Dispatchers.IO) {
-                                                repository.downloadFile(file.key, dest)
-                                            }
-                                            Toast.makeText(
-                                                context,
-                                                "Baixado em: ${dest.absolutePath}",
-                                                Toast.LENGTH_LONG,
-                                            ).show()
-                                        } catch (e: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                "Erro no download: ${e.message}",
-                                                Toast.LENGTH_LONG,
-                                            ).show()
-                                        } finally {
-                                            isLoading = false
-                                        }
-                                    }
+                                    val intent = TransferService.downloadIntent(
+                                        context, file.key, file.fileName, config
+                                    )
+                                    context.startForegroundService(intent)
+                                    Toast.makeText(
+                                        context,
+                                        "Download iniciado: ${file.fileName}",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
                                 },
                                 onDelete = { showDeleteDialog = file },
                             )

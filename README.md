@@ -26,6 +26,8 @@
 | **Navegacao por pastas** | Navegue pela hierarquia de pastas dentro do bucket |
 | **Criar pastas** | Organize seus arquivos criando pastas diretamente pelo app |
 | **Excluir arquivos** | Remova arquivos do bucket com confirmacao de seguranca |
+| **Transferencias em segundo plano** | Uploads e downloads continuam mesmo ao sair do app (Foreground Service) |
+| **Notificacoes de progresso** | Acompanhe o status das transferencias pela barra de notificacoes |
 | **Icones por tipo** | Icones visuais distintos para imagens, videos, audios e documentos |
 | **Tema claro/escuro** | Suporte automatico a tema escuro com Dynamic Colors (Android 12+) |
 | **Configuracao segura** | Credenciais AWS salvas localmente com DataStore |
@@ -48,6 +50,9 @@ com.clouddrive/
 |   |-- S3Repository.kt          # Operacoes CRUD no bucket
 |   |-- SettingsManager.kt       # Persistencia de credenciais (DataStore)
 |
+|-- service/                      # Camada de servicos (Background)
+|   |-- TransferService.kt       # Foreground Service para uploads/downloads
+|
 |-- ui/                           # Camada de apresentacao (Jetpack Compose)
     |-- FileListScreen.kt        # Tela principal - listagem e acoes
     |-- SettingsScreen.kt        # Tela de configuracao AWS
@@ -69,21 +74,19 @@ com.clouddrive/
                                     v
 +------------------+       +-------------------+       +------------------+
 |                  |       |                   |       |                  |
-|  FileListScreen  | ----> |   S3Repository    | ----> | S3ClientProvider |
-|  (UI Principal)  |       |   (Operacoes)     |       |  (AWS S3 Client) |
+|  FileListScreen  | ----> | TransferService   | ----> |   S3Repository   |
+|  (UI Principal)  |       | (Foreground Svc)  |       |   (Operacoes)    |
 |                  |       |                   |       |                  |
 +------------------+       +-------------------+       +------------------+
-       |                           |
-       | Upload/Download           | ListObjects
-       | CreateFolder              | PutObject
-       | Delete                    | GetObject
-       v                           | DeleteObject
-+------------------+               v
-|                  |       +------------------+
-|  Device Storage  |       |   Amazon S3      |
-|  (Downloads/)    |       |   (Bucket)       |
-|                  |       |                  |
-+------------------+       +------------------+
+       ^                           |                           |
+       | Broadcast                 | Notificacoes              | S3ClientProvider
+       | (refresh)                 v                           v
++------------------+       +------------------+       +------------------+
+|                  |       |                  |       |                  |
+|  Device Storage  |       | NotificationMgr  |       |   Amazon S3      |
+|  (Downloads/)    |       | (Progresso)      |       |   (Bucket)       |
+|                  |       |                  |       |                  |
++------------------+       +------------------+       +------------------+
 ```
 
 ---
@@ -233,6 +236,8 @@ storage-cloud-drive/
         |   |   |-- S3ClientProvider.kt # Singleton com cache do S3Client
         |   |   |-- S3Repository.kt     # CRUD: list, upload, download, delete
         |   |   |-- SettingsManager.kt  # DataStore para salvar credenciais
+        |   |-- service/
+        |   |   |-- TransferService.kt  # Foreground Service para transferencias
         |   |-- ui/
         |       |-- FileListScreen.kt   # Tela principal (~320 linhas)
         |       |-- SettingsScreen.kt   # Formulario de configuracao AWS
