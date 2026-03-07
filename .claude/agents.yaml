@@ -1,0 +1,223 @@
+version: "1.0"
+project: "Cloud Drive S3"
+description: "Android app that transforms an Amazon S3 bucket into a personal cloud drive"
+
+# Agent definitions for specialized development tasks
+agents:
+  # Unit Testing Agent
+  - name: kotlin-unit-test-builder
+    type: testing
+    description: "Write comprehensive unit tests for Kotlin code"
+    model: haiku
+    color: purple
+    enabled: true
+    triggers:
+      - event: code_written
+        language: kotlin
+        description: "Automatically suggest unit tests for new Kotlin functions/classes"
+      - event: manual_invocation
+        trigger_phrase: "write tests for"
+
+  # Code Quality Agent
+  - name: code-quality-reviewer
+    type: analysis
+    description: "Review code for quality, security, and best practices"
+    model: haiku
+    color: blue
+    enabled: true
+    triggers:
+      - event: pull_request
+        description: "Analyze PR for code quality issues"
+      - event: manual_invocation
+        trigger_phrase: "review code"
+
+  # Documentation Agent
+  - name: documentation-generator
+    type: documentation
+    description: "Generate and maintain API documentation and code comments"
+    model: haiku
+    color: green
+    enabled: true
+    triggers:
+      - event: manual_invocation
+        trigger_phrase: "document"
+
+  # Build & Deployment Agent
+  - name: android-build-deployer
+    type: ci_cd
+    description: "Manage Android builds, testing, and release automation"
+    model: haiku
+    color: orange
+    enabled: true
+    capabilities:
+      - build:debug
+      - build:release
+      - run:tests
+      - lint:checks
+      - apk:signing
+      - apk:distribution
+
+  # Architecture Assistant
+  - name: architecture-advisor
+    type: architecture
+    description: "Review architecture decisions and provide guidance"
+    model: haiku
+    color: red
+    enabled: true
+    triggers:
+      - event: manual_invocation
+        trigger_phrase: "architecture" | "design" | "refactor"
+
+# Workflow automation configuration
+workflows:
+  # Development workflow
+  development:
+    name: "Development Workflow"
+    stages:
+      - name: "Code Changes"
+        trigger: "on-commit"
+        agents:
+          - code-quality-reviewer
+        commands:
+          - "./gradlew lint"
+
+      - name: "Testing"
+        trigger: "on-code-quality-pass"
+        agents:
+          - kotlin-unit-test-builder
+        commands:
+          - "./gradlew test"
+
+      - name: "Documentation"
+        trigger: "on-test-pass"
+        agents:
+          - documentation-generator
+        commands:
+          - "./gradlew dokka"
+
+  # Release workflow
+  release:
+    name: "Release Workflow"
+    stages:
+      - name: "Build Release"
+        trigger: "manual"
+        agents:
+          - android-build-deployer
+        commands:
+          - "./gradlew assembleRelease"
+          - "./gradlew bundleRelease"
+
+      - name: "Sign APK"
+        trigger: "on-build-success"
+        agents:
+          - android-build-deployer
+        commands:
+          - "# Signing handled by gradle.properties"
+
+      - name: "Distribution"
+        trigger: "on-sign-success"
+        agents:
+          - android-build-deployer
+        commands:
+          - "# Upload to Play Store / GitHub Releases"
+
+  # Pull Request Review
+  pull_request:
+    name: "Pull Request Review"
+    stages:
+      - name: "Code Quality"
+        trigger: "on-pr-opened"
+        agents:
+          - code-quality-reviewer
+          - kotlin-unit-test-builder
+        commands:
+          - "./gradlew build"
+          - "./gradlew lint"
+
+      - name: "Architecture Review"
+        trigger: "on-code-quality-pass"
+        agents:
+          - architecture-advisor
+        commands:
+          - "# Manual review of architectural changes"
+
+# Integration configuration
+integrations:
+  github:
+    enabled: true
+    workflows_path: ".github/workflows"
+    pull_request_checks: true
+    branch_protection: true
+
+  slack:
+    enabled: false
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    notify_on:
+      - build_failure
+      - test_failure
+      - release_complete
+
+# Agent memory and learning
+memory:
+  enabled: true
+  path: ".claude/memory"
+  auto_update: true
+  topics:
+    - kotlin_testing_patterns
+    - android_best_practices
+    - s3_integration_learnings
+    - ui_compose_patterns
+    - coroutine_patterns
+
+# Development environment
+environment:
+  android:
+    min_sdk: 26
+    target_sdk: 34
+    compile_sdk: 34
+    gradle_version: "8.5"
+    kotlin_version: "1.9"
+
+  java:
+    target: "17"
+    source: "17"
+
+  tools:
+    - gradle: "8.5"
+    - kotlin: "1.9"
+    - android_studio: "latest"
+    - adb: "latest"
+
+# Quality gates
+quality_gates:
+  enabled: true
+  rules:
+    - name: "Lint Checks"
+      command: "./gradlew lint"
+      fail_threshold: "error"
+
+    - name: "Unit Tests"
+      command: "./gradlew test"
+      coverage_threshold: 70
+
+    - name: "Security Scan"
+      command: "./gradlew detekt"
+      fail_threshold: "error"
+
+# Notification settings
+notifications:
+  enabled: true
+  channels:
+    - type: "console"
+      level: "info"
+    - type: "github"
+      level: "error"
+
+# Common agent commands
+commands:
+  build: "./gradlew assembleDebug"
+  test: "./gradlew test"
+  lint: "./gradlew lint"
+  clean: "./gradlew clean"
+  release: "./gradlew assembleRelease"
+  install: "./gradlew installDebug"
