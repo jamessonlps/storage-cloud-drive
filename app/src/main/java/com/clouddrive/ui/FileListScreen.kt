@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
@@ -449,7 +449,7 @@ private fun getFileIcon(file: S3FileItem): ImageVector {
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg" -> Icons.Filled.Image
         "mp4", "avi", "mkv", "mov", "wmv", "flv" -> Icons.Filled.VideoFile
         "mp3", "wav", "aac", "ogg", "flac", "m4a" -> Icons.Filled.AudioFile
-        else -> Icons.AutoMirrored.Filled.InsertDriveFile
+        else -> Icons.Filled.InsertDriveFile
     }
 }
 
