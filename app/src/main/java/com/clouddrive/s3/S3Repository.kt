@@ -7,6 +7,9 @@ import aws.sdk.kotlin.services.s3.model.ListObjectsV2Response
 import aws.sdk.kotlin.services.s3.model.PutObjectRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import java.io.File
 import java.io.InputStream
 import java.text.DecimalFormat
@@ -142,6 +145,12 @@ class S3Repository(private val config: S3Config) {
             this.key = key
         }
         client.deleteObject(request)
+    }
+
+    suspend fun deleteFiles(keys: List<String>) {
+        coroutineScope {
+            keys.map { key -> async { deleteFile(key) } }.awaitAll()
+        }
     }
 
     suspend fun createFolder(prefix: String) {

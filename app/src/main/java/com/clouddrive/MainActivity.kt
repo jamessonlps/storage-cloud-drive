@@ -14,10 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +81,15 @@ class MainActivity : ComponentActivity() {
                 var itemCount by remember { mutableIntStateOf(0) }
                 var itemsHasMore by remember { mutableStateOf(false) }
 
+                // Selection mode state
+                var isSelectionMode by remember { mutableStateOf(false) }
+                var selectedCount by remember { mutableIntStateOf(0) }
+                var hasSelectedFolders by remember { mutableStateOf(false) }
+                var selectAllTrigger by remember { mutableIntStateOf(0) }
+                var clearSelectionTrigger by remember { mutableIntStateOf(0) }
+                var deleteSelectedTrigger by remember { mutableIntStateOf(0) }
+                var downloadSelectedTrigger by remember { mutableIntStateOf(0) }
+
                 // Shared snackbar
                 val snackbarHostState = remember { SnackbarHostState() }
 
@@ -88,8 +101,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // System back button: exit selection mode first
+                BackHandler(enabled = currentScreen == Screen.Home && isSelectionMode) {
+                    clearSelectionTrigger++
+                }
+
                 // System back button: navigate up folders, then switch to Home, then default
-                BackHandler(enabled = currentScreen == Screen.Home && pathStack.isNotEmpty()) {
+                BackHandler(enabled = currentScreen == Screen.Home && !isSelectionMode && pathStack.isNotEmpty()) {
                     pathStack.removeLastOrNull()
                     currentPrefix = pathStack.lastOrNull() ?: ""
                 }
@@ -101,8 +119,14 @@ class MainActivity : ComponentActivity() {
                     topBar = {
                         TopAppBar(
                             title = {
-                                when (currentScreen) {
-                                    Screen.Home -> Column {
+                                when {
+                                    currentScreen == Screen.Home && isSelectionMode -> {
+                                        Text(
+                                            "$selectedCount selecionado${if (selectedCount != 1) "s" else ""}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                        )
+                                    }
+                                    currentScreen == Screen.Home -> Column {
                                         if (config != null && itemCount > 0) {
                                             Text(
                                                 text = if (itemsHasMore) "Exibindo $itemCount itens..." else "Exibindo todos os $itemCount itens",
@@ -123,11 +147,15 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     }
-                                    Screen.Settings -> Text("Configuracoes AWS S3")
+                                    else -> Text("Configuracoes AWS S3")
                                 }
                             },
                             navigationIcon = {
-                                if (currentScreen == Screen.Home && pathStack.isNotEmpty()) {
+                                if (currentScreen == Screen.Home && isSelectionMode) {
+                                    IconButton(onClick = { clearSelectionTrigger++ }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "Cancelar selecao")
+                                    }
+                                } else if (currentScreen == Screen.Home && pathStack.isNotEmpty()) {
                                     IconButton(onClick = {
                                         pathStack.removeLastOrNull()
                                         currentPrefix = pathStack.lastOrNull() ?: ""
@@ -137,7 +165,37 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
-                                if (currentScreen == Screen.Home && config != null) {
+                                if (currentScreen == Screen.Home && isSelectionMode) {
+                                    IconButton(onClick = { selectAllTrigger++ }) {
+                                        Icon(Icons.Filled.SelectAll, contentDescription = "Selecionar tudo")
+                                    }
+                                    IconButton(
+                                        onClick = { downloadSelectedTrigger++ },
+                                        enabled = !hasSelectedFolders && selectedCount > 0,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.CloudDownload,
+                                            contentDescription = "Baixar selecionados",
+                                            tint = if (!hasSelectedFolders && selectedCount > 0)
+                                                MaterialTheme.colorScheme.primary
+                                            else
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { deleteSelectedTrigger++ },
+                                        enabled = selectedCount > 0,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Excluir selecionados",
+                                            tint = if (selectedCount > 0)
+                                                MaterialTheme.colorScheme.error
+                                            else
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                                        )
+                                    }
+                                } else if (currentScreen == Screen.Home && config != null) {
                                     IconButton(onClick = { showNewFolderDialog = true }) {
                                         Icon(Icons.Filled.CreateNewFolder, contentDescription = "Nova pasta")
                                     }
@@ -189,6 +247,15 @@ class MainActivity : ComponentActivity() {
                                         itemCount = count
                                         itemsHasMore = hasMore
                                     },
+                                    onSelectionChanged = { selMode, selCount, hasFolders ->
+                                        isSelectionMode = selMode
+                                        selectedCount = selCount
+                                        hasSelectedFolders = hasFolders
+                                    },
+                                    selectAllTrigger = selectAllTrigger,
+                                    clearSelectionTrigger = clearSelectionTrigger,
+                                    deleteSelectedTrigger = deleteSelectedTrigger,
+                                    downloadSelectedTrigger = downloadSelectedTrigger,
                                     modifier = Modifier.padding(padding),
                                 )
                             }

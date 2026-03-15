@@ -12,7 +12,8 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
@@ -43,8 +45,10 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.VideoFile
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -58,6 +62,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -89,6 +94,11 @@ fun FileListScreen(
     onDismissNewFolderDialog: () -> Unit,
     pageSize: Int,
     onItemCountChanged: (count: Int, hasMore: Boolean) -> Unit,
+    onSelectionChanged: (isSelectionMode: Boolean, selectedCount: Int, hasSelectedFolders: Boolean) -> Unit,
+    selectAllTrigger: Int,
+    clearSelectionTrigger: Int,
+    deleteSelectedTrigger: Int,
+    downloadSelectedTrigger: Int,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -100,8 +110,70 @@ fun FileListScreen(
     var isLoadingMore by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var continuationToken by remember { mutableStateOf<String?>(null) }
     var hasMore by remember { mutableStateOf(false) }
+
+    // Selection mode state
+    var isSelectionMode by remember { mutableStateOf(false) }
+    val selectedKeys = remember { mutableStateListOf<String>() }
+
+    fun notifySelectionChanged() {
+        val hasFolder = selectedKeys.any { key -> files.any { it.key == key && it.isFolder } }
+        onSelectionChanged(isSelectionMode, selectedKeys.size, hasFolder)
+    }
+
+    fun toggleSelection(key: String) {
+        if (selectedKeys.contains(key)) selectedKeys.remove(key) else selectedKeys.add(key)
+        if (selectedKeys.isEmpty()) {
+            isSelectionMode = false
+        }
+        notifySelectionChanged()
+    }
+
+    fun clearSelection() {
+        selectedKeys.clear()
+        isSelectionMode = false
+        notifySelectionChanged()
+    }
+
+    fun selectAll() {
+        selectedKeys.clear()
+        selectedKeys.addAll(files.map { it.key })
+        notifySelectionChanged()
+    }
+
+    // React to toolbar triggers from MainActivity
+    LaunchedEffect(selectAllTrigger) {
+        if (selectAllTrigger > 0 && isSelectionMode) selectAll()
+    }
+
+    LaunchedEffect(clearSelectionTrigger) {
+        if (clearSelectionTrigger > 0) clearSelection()
+    }
+
+    LaunchedEffect(deleteSelectedTrigger) {
+        if (deleteSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
+            showBatchDeleteDialog = true
+        }
+    }
+
+    LaunchedEffect(downloadSelectedTrigger) {
+        if (downloadSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
+            val filesToDownload = files.filter { it.key in selectedKeys && !it.isFolder }
+            filesToDownload.forEach { file ->
+                val intent = TransferService.downloadIntent(context, file.key, file.fileName, config)
+                context.startForegroundService(intent)
+            }
+            Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+            clearSelection()
+        }
+    }
+
+    // Clear selection when navigating to different prefix
+    LaunchedEffect(currentPrefix) {
+        if (isSelectionMode) clearSelection()
+    }
 
     fun loadFiles() {
         scope.launch {
@@ -251,6 +323,8 @@ fun FileListScreen(
                     items(files, key = { it.key }) { file ->
                         FileItemCard(
                             file = file,
+                            isSelectionMode = isSelectionMode,
+                            isSelected = file.key in selectedKeys,
                             onFolderClick = { onNavigateToFolder(file.key) },
                             onDownload = {
                                 val intent = TransferService.downloadIntent(
@@ -264,6 +338,14 @@ fun FileListScreen(
                                 ).show()
                             },
                             onDelete = { showDeleteDialog = file },
+                            onLongClick = {
+                                if (!isSelectionMode) {
+                                    isSelectionMode = true
+                                    selectedKeys.add(file.key)
+                                    notifySelectionChanged()
+                                }
+                            },
+                            onToggleSelect = { toggleSelection(file.key) },
                         )
                     }
 
@@ -283,14 +365,16 @@ fun FileListScreen(
             }
         }
 
-        // FAB overlay
-        FloatingActionButton(
-            onClick = { filePickerLauncher.launch("*/*") },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-        ) {
-            Icon(Icons.Filled.CloudUpload, contentDescription = "Upload")
+        // FAB overlay (hidden during selection mode)
+        if (!isSelectionMode) {
+            FloatingActionButton(
+                onClick = { filePickerLauncher.launch("*/*") },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+            ) {
+                Icon(Icons.Filled.CloudUpload, contentDescription = "Upload")
+            }
         }
     }
 
@@ -370,20 +454,78 @@ fun FileListScreen(
             },
         )
     }
+
+    // Batch delete confirmation dialog
+    if (showBatchDeleteDialog) {
+        val count = selectedKeys.size
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteDialog = false },
+            title = { Text("Excluir $count ite${if (count == 1) "m" else "ns"}") },
+            text = { Text("Deseja excluir os $count itens selecionados? Esta acao nao pode ser desfeita.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val keysToDelete = selectedKeys.toList()
+                        showBatchDeleteDialog = false
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    repository.deleteFiles(keysToDelete)
+                                }
+                                clearSelection()
+                                loadFiles()
+                                Toast.makeText(context, "$count ite${if (count == 1) "m excluido" else "ns excluidos"}", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                ) {
+                    Text("Excluir", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteDialog = false }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileItemCard(
     file: S3FileItem,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
     onFolderClick: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
+    onLongClick: () -> Unit,
+    onToggleSelect: () -> Unit,
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .then(if (file.isFolder) Modifier.clickable { onFolderClick() } else Modifier),
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect()
+                    } else if (file.isFolder) {
+                        onFolderClick()
+                    }
+                },
+                onLongClick = onLongClick,
+            ),
+        colors = if (isSelected) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            )
+        } else {
+            CardDefaults.cardColors()
+        },
     ) {
         Row(
             modifier = Modifier
@@ -391,12 +533,21 @@ private fun FileItemCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = getFileIcon(file),
-                contentDescription = null,
-                tint = getFileIconColor(file),
-                modifier = Modifier.size(36.dp),
-            )
+            if (isSelectionMode) {
+                Icon(
+                    imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = if (isSelected) "Selecionado" else "Nao selecionado",
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(36.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = getFileIcon(file),
+                    contentDescription = null,
+                    tint = getFileIconColor(file),
+                    modifier = Modifier.size(36.dp),
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -416,7 +567,7 @@ private fun FileItemCard(
                 }
             }
 
-            if (!file.isFolder) {
+            if (!isSelectionMode && !file.isFolder) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(onClick = onDownload) {
                         Icon(
