@@ -27,36 +27,28 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,24 +68,24 @@ import com.clouddrive.service.TransferService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileListScreen(
     config: S3Config,
-    onNavigateToSettings: () -> Unit,
+    currentPrefix: String,
+    onNavigateToFolder: (String) -> Unit,
+    refreshTrigger: Int,
+    showNewFolderDialog: Boolean,
+    onDismissNewFolderDialog: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(config) { S3Repository(config) }
 
-    var currentPrefix by remember { mutableStateOf("") }
-    val pathStack = remember { mutableStateListOf<String>() }
     var files by remember { mutableStateOf<List<S3FileItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showNewFolderDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
 
     fun loadFiles() {
@@ -130,7 +122,8 @@ fun FileListScreen(
         }
     }
 
-    LaunchedEffect(currentPrefix) {
+    // Reload when prefix changes or refresh is triggered
+    LaunchedEffect(currentPrefix, refreshTrigger) {
         loadFiles()
     }
 
@@ -160,140 +153,77 @@ fun FileListScreen(
         Toast.makeText(context, "Upload iniciado: $fileName", Toast.LENGTH_SHORT).show()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Cloud Drive S3", style = MaterialTheme.typography.titleMedium)
-                        if (currentPrefix.isNotEmpty()) {
-                            Text(
-                                text = "/$currentPrefix",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showNewFolderDialog = true }) {
-                        Icon(Icons.Filled.CreateNewFolder, contentDescription = "Nova pasta")
-                    }
-                    IconButton(onClick = { loadFiles() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Atualizar")
-                    }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Configuracoes")
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { filePickerLauncher.launch("*/*") },
-            ) {
-                Icon(Icons.Filled.CloudUpload, contentDescription = "Upload")
+    Box(modifier = modifier.fillMaxSize()) {
+        when {
+            isLoading -> {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            when {
-                isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                errorMessage != null -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "Erro: $errorMessage",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = { loadFiles() }) {
-                            Text("Tentar novamente")
-                        }
-                    }
-                }
-                files.isEmpty() && currentPrefix.isEmpty() -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "Bucket vazio",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            text = "Toque no botao + para enviar arquivos",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        // Back button when inside a folder
-                        if (pathStack.isNotEmpty()) {
-                            item {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                                        .clickable {
-                                            pathStack.removeLastOrNull()
-                                            currentPrefix = pathStack.lastOrNull() ?: ""
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    ),
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Folder,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(32.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text("..", style = MaterialTheme.typography.bodyLarge)
-                                    }
-                                }
-                            }
-                        }
-
-                        items(files, key = { it.key }) { file ->
-                            FileItemCard(
-                                file = file,
-                                onFolderClick = {
-                                    pathStack.add(file.key)
-                                    currentPrefix = file.key
-                                },
-                                onDownload = {
-                                    val intent = TransferService.downloadIntent(
-                                        context, file.key, file.fileName, config
-                                    )
-                                    context.startForegroundService(intent)
-                                    Toast.makeText(
-                                        context,
-                                        "Download iniciado: ${file.fileName}",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                },
-                                onDelete = { showDeleteDialog = file },
-                            )
-                        }
-
-                        item { Spacer(modifier = Modifier.height(80.dp)) }
+            errorMessage != null -> {
+                Column(
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "Erro: $errorMessage",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = { loadFiles() }) {
+                        Text("Tentar novamente")
                     }
                 }
             }
+            files.isEmpty() && currentPrefix.isEmpty() -> {
+                Column(
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "Bucket vazio",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "Toque no botao + para enviar arquivos",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(files, key = { it.key }) { file ->
+                        FileItemCard(
+                            file = file,
+                            onFolderClick = { onNavigateToFolder(file.key) },
+                            onDownload = {
+                                val intent = TransferService.downloadIntent(
+                                    context, file.key, file.fileName, config
+                                )
+                                context.startForegroundService(intent)
+                                Toast.makeText(
+                                    context,
+                                    "Download iniciado: ${file.fileName}",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            },
+                            onDelete = { showDeleteDialog = file },
+                        )
+                    }
+
+                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                }
+            }
+        }
+
+        // FAB overlay
+        FloatingActionButton(
+            onClick = { filePickerLauncher.launch("*/*") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+        ) {
+            Icon(Icons.Filled.CloudUpload, contentDescription = "Upload")
         }
     }
 
@@ -301,7 +231,7 @@ fun FileListScreen(
     if (showNewFolderDialog) {
         var folderName by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { showNewFolderDialog = false },
+            onDismissRequest = onDismissNewFolderDialog,
             title = { Text("Nova Pasta") },
             text = {
                 OutlinedTextField(
@@ -320,7 +250,7 @@ fun FileListScreen(
                                     withContext(Dispatchers.IO) {
                                         repository.createFolder(currentPrefix + folderName.trim())
                                     }
-                                    showNewFolderDialog = false
+                                    onDismissNewFolderDialog()
                                     loadFiles()
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
@@ -333,7 +263,7 @@ fun FileListScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showNewFolderDialog = false }) {
+                TextButton(onClick = onDismissNewFolderDialog) {
                     Text("Cancelar")
                 }
             },
