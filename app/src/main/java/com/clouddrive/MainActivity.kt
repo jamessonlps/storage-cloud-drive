@@ -67,7 +67,9 @@ class MainActivity : ComponentActivity() {
         val settingsManager = SettingsManager(applicationContext)
 
         setContent {
-            CloudDriveTheme {
+            var themeMode by remember { mutableStateOf(settingsManager.getThemeMode()) }
+
+            CloudDriveTheme(themeMode = themeMode) {
                 val config by settingsManager.configFlow.collectAsState(initial = null)
                 var currentScreen by remember { mutableStateOf(Screen.Home) }
 
@@ -278,6 +280,7 @@ class MainActivity : ComponentActivity() {
                                 currentConfig = config,
                                 snackbarHostState = snackbarHostState,
                                 onSaveSuccess = { currentScreen = Screen.Home },
+                                onThemeModeChanged = { themeMode = it },
                                 modifier = Modifier.padding(padding),
                             )
                         }
