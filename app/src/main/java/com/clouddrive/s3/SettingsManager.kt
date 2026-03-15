@@ -16,7 +16,11 @@ class SettingsManager(context: Context) {
         private const val KEY_REGION = "region"
         private const val KEY_BUCKET = "bucket_name"
         private const val KEY_PAGE_SIZE = "page_size"
+        private const val KEY_THEME_MODE = "theme_mode"
         const val DEFAULT_PAGE_SIZE = 100
+        const val THEME_SYSTEM = "system"
+        const val THEME_LIGHT = "light"
+        const val THEME_DARK = "dark"
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -72,5 +76,11 @@ class SettingsManager(context: Context) {
 
     fun savePageSize(size: Int) {
         prefs.edit().putInt(KEY_PAGE_SIZE, size).apply()
+    }
+
+    fun getThemeMode(): String = prefs.getString(KEY_THEME_MODE, THEME_SYSTEM) ?: THEME_SYSTEM
+
+    fun saveThemeMode(mode: String) {
+        prefs.edit().putString(KEY_THEME_MODE, mode).apply()
     }
 }

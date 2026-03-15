@@ -22,7 +22,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -65,13 +67,18 @@ class MainActivity : ComponentActivity() {
         val settingsManager = SettingsManager(applicationContext)
 
         setContent {
-            CloudDriveTheme {
+            var themeMode by remember { mutableStateOf(settingsManager.getThemeMode()) }
+
+            CloudDriveTheme(themeMode = themeMode) {
                 val config by settingsManager.configFlow.collectAsState(initial = null)
                 var currentScreen by remember { mutableStateOf(Screen.Home) }
 
                 // Folder navigation state (hoisted)
                 var currentPrefix by remember { mutableStateOf("") }
                 val pathStack = remember { mutableStateListOf<String>() }
+
+                // View mode state
+                var isGridView by remember { mutableStateOf(false) }
 
                 // Toolbar action triggers
                 var refreshTrigger by remember { mutableStateOf(0) }
@@ -196,6 +203,12 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 } else if (currentScreen == Screen.Home && config != null) {
+                                    IconButton(onClick = { isGridView = !isGridView }) {
+                                        Icon(
+                                            imageVector = if (isGridView) Icons.Filled.ViewList else Icons.Filled.GridView,
+                                            contentDescription = if (isGridView) "Modo lista" else "Modo grade",
+                                        )
+                                    }
                                     IconButton(onClick = { showNewFolderDialog = true }) {
                                         Icon(Icons.Filled.CreateNewFolder, contentDescription = "Nova pasta")
                                     }
@@ -234,6 +247,7 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 FileListScreen(
                                     config = config!!,
+                                    isGridView = isGridView,
                                     currentPrefix = currentPrefix,
                                     onNavigateToFolder = { folderKey ->
                                         pathStack.add(folderKey)
@@ -266,6 +280,7 @@ class MainActivity : ComponentActivity() {
                                 currentConfig = config,
                                 snackbarHostState = snackbarHostState,
                                 onSaveSuccess = { currentScreen = Screen.Home },
+                                onThemeModeChanged = { themeMode = it },
                                 modifier = Modifier.padding(padding),
                             )
                         }

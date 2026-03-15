@@ -13,12 +13,15 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +29,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -72,9 +79,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3FileItem
 import com.clouddrive.s3.S3Repository
@@ -87,6 +96,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FileListScreen(
     config: S3Config,
+    isGridView: Boolean,
     currentPrefix: String,
     onNavigateToFolder: (String) -> Unit,
     refreshTrigger: Int,
@@ -319,48 +329,101 @@ fun FileListScreen(
                 }
             }
             else -> {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(files, key = { it.key }) { file ->
-                        FileItemCard(
-                            file = file,
-                            isSelectionMode = isSelectionMode,
-                            isSelected = file.key in selectedKeys,
-                            onFolderClick = { onNavigateToFolder(file.key) },
-                            onDownload = {
-                                val intent = TransferService.downloadIntent(
-                                    context, file.key, file.fileName, config
-                                )
-                                context.startForegroundService(intent)
-                                Toast.makeText(
-                                    context,
-                                    "Download iniciado: ${file.fileName}",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
-                            },
-                            onDelete = { showDeleteDialog = file },
-                            onLongClick = {
-                                if (!isSelectionMode) {
-                                    isSelectionMode = true
-                                    selectedKeys.add(file.key)
-                                    notifySelectionChanged()
-                                }
-                            },
-                            onToggleSelect = { toggleSelection(file.key) },
-                        )
-                    }
-
-                    if (isLoadingMore) {
-                        item {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                            }
+                if (isGridView) {
+                    val gridState = rememberLazyGridState()
+                    val shouldLoadMoreGrid by remember {
+                        derivedStateOf {
+                            val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                            lastVisible >= files.size - 5 && hasMore && !isLoadingMore
                         }
                     }
+                    LaunchedEffect(shouldLoadMoreGrid) {
+                        if (shouldLoadMoreGrid) loadMore()
+                    }
 
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 150.dp),
+                        state = gridState,
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(files, key = { it.key }) { file ->
+                            GridFileItemCard(
+                                file = file,
+                                config = config,
+                                isSelectionMode = isSelectionMode,
+                                isSelected = file.key in selectedKeys,
+                                onFolderClick = { onNavigateToFolder(file.key) },
+                                onLongClick = {
+                                    if (!isSelectionMode) {
+                                        isSelectionMode = true
+                                        selectedKeys.add(file.key)
+                                        notifySelectionChanged()
+                                    }
+                                },
+                                onToggleSelect = { toggleSelection(file.key) },
+                            )
+                        }
+
+                        if (isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                }
+                            }
+                        }
+
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
+                    }
+                } else {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                        items(files, key = { it.key }) { file ->
+                            FileItemCard(
+                                file = file,
+                                isSelectionMode = isSelectionMode,
+                                isSelected = file.key in selectedKeys,
+                                onFolderClick = { onNavigateToFolder(file.key) },
+                                onDownload = {
+                                    val intent = TransferService.downloadIntent(
+                                        context, file.key, file.fileName, config
+                                    )
+                                    context.startForegroundService(intent)
+                                    Toast.makeText(
+                                        context,
+                                        "Download iniciado: ${file.fileName}",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                },
+                                onDelete = { showDeleteDialog = file },
+                                onLongClick = {
+                                    if (!isSelectionMode) {
+                                        isSelectionMode = true
+                                        selectedKeys.add(file.key)
+                                        notifySelectionChanged()
+                                    }
+                                },
+                                onToggleSelect = { toggleSelection(file.key) },
+                            )
+                        }
+
+                        if (isLoadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                }
+                            }
+                        }
+
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
+                    }
                 }
             }
         }
@@ -587,6 +650,106 @@ private fun FileItemCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GridFileItemCard(
+    file: S3FileItem,
+    config: S3Config,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
+    onFolderClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onToggleSelect: () -> Unit,
+) {
+    val isImage = !file.isFolder && isImageFile(file.fileName)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) onToggleSelect()
+                    else if (file.isFolder) onFolderClick()
+                },
+                onLongClick = onLongClick,
+            ),
+        colors = if (isSelected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        },
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (isImage) {
+                AsyncImage(
+                    model = S3ImageRequest(key = file.key, config = config),
+                    contentDescription = file.fileName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = getFileIcon(file),
+                        contentDescription = null,
+                        tint = getFileIconColor(file),
+                        modifier = Modifier.size(48.dp),
+                    )
+                }
+            }
+
+            // Filename overlay at bottom
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Column {
+                    Text(
+                        text = file.fileName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!file.isFolder) {
+                        Text(
+                            text = file.formattedSize,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+            }
+
+            // Selection checkbox overlay
+            if (isSelectionMode) {
+                Icon(
+                    imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = if (isSelected) "Selecionado" else "Nao selecionado",
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(24.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun isImageFile(fileName: String): Boolean {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    return ext in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif")
 }
 
 private fun getFileIcon(file: S3FileItem): ImageVector {

@@ -139,6 +139,18 @@ class S3Repository(private val config: S3Config) {
         }
     }
 
+    suspend fun downloadFileBytes(key: String): ByteArray {
+        val request = GetObjectRequest {
+            this.bucket = this@S3Repository.bucket
+            this.key = key
+        }
+        var result = byteArrayOf()
+        client.getObject(request) { response ->
+            result = response.body?.toByteArray() ?: byteArrayOf()
+        }
+        return result
+    }
+
     suspend fun deleteFile(key: String) {
         val request = DeleteObjectRequest {
             this.bucket = this@S3Repository.bucket
