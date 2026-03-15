@@ -28,13 +28,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -57,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -386,8 +394,7 @@ private fun FileItemCard(
             Icon(
                 imageVector = getFileIcon(file),
                 contentDescription = null,
-                tint = if (file.isFolder) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = getFileIconColor(file),
                 modifier = Modifier.size(36.dp),
             )
 
@@ -435,10 +442,51 @@ private fun getFileIcon(file: S3FileItem): ImageVector {
     if (file.isFolder) return Icons.Filled.Folder
     val ext = file.fileName.substringAfterLast('.', "").lowercase()
     return when (ext) {
-        "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg" -> Icons.Filled.Image
-        "mp4", "avi", "mkv", "mov", "wmv", "flv" -> Icons.Filled.VideoFile
-        "mp3", "wav", "aac", "ogg", "flac", "m4a" -> Icons.Filled.AudioFile
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg",
+        "ico", "tiff", "tif", "heic", "heif", "raw" -> Icons.Filled.Image
+        "mp4", "avi", "mkv", "mov", "wmv", "flv",
+        "webm", "m4v", "3gp", "mpeg", "mpg" -> Icons.Filled.VideoFile
+        "mp3", "wav", "aac", "ogg", "flac", "m4a",
+        "wma", "opus", "alac", "aiff" -> Icons.Filled.AudioFile
+        "pdf" -> Icons.Filled.PictureAsPdf
+        "xlsx", "xls", "csv", "tsv", "ods", "numbers" -> Icons.Filled.TableChart
+        "doc", "docx", "odt", "rtf", "txt", "pages",
+        "tex", "md" -> Icons.Filled.Description
+        "ppt", "pptx", "odp", "key" -> Icons.Filled.Slideshow
+        "json", "xml", "html", "css", "js", "ts", "py",
+        "java", "kt", "c", "cpp", "h", "go", "rs", "rb",
+        "php", "sh", "yaml", "yml", "toml", "sql",
+        "swift", "dart" -> Icons.Filled.Code
+        "zip", "rar", "7z", "tar", "gz", "bz2",
+        "xz", "tgz", "zst" -> Icons.Filled.FolderZip
+        "apk" -> Icons.Filled.Android
         else -> Icons.Filled.InsertDriveFile
+    }
+}
+
+private fun getFileIconColor(file: S3FileItem): Color {
+    if (file.isFolder) return Color(0xFF5C6BC0) // Indigo
+    val ext = file.fileName.substringAfterLast('.', "").lowercase()
+    return when (ext) {
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg",
+        "ico", "tiff", "tif", "heic", "heif", "raw" -> Color(0xFF7E57C2) // Purple
+        "mp4", "avi", "mkv", "mov", "wmv", "flv",
+        "webm", "m4v", "3gp", "mpeg", "mpg" -> Color(0xFFEC407A) // Pink
+        "mp3", "wav", "aac", "ogg", "flac", "m4a",
+        "wma", "opus", "alac", "aiff" -> Color(0xFF00ACC1) // Cyan
+        "pdf" -> Color(0xFFE53935) // Red
+        "xlsx", "xls", "csv", "tsv", "ods", "numbers" -> Color(0xFF43A047) // Green
+        "doc", "docx", "odt", "rtf", "txt", "pages",
+        "tex", "md" -> Color(0xFF1E88E5) // Blue
+        "ppt", "pptx", "odp", "key" -> Color(0xFFFB8C00) // Orange
+        "json", "xml", "html", "css", "js", "ts", "py",
+        "java", "kt", "c", "cpp", "h", "go", "rs", "rb",
+        "php", "sh", "yaml", "yml", "toml", "sql",
+        "swift", "dart" -> Color(0xFF546E7A) // Blue Grey
+        "zip", "rar", "7z", "tar", "gz", "bz2",
+        "xz", "tgz", "zst" -> Color(0xFFFDD835) // Yellow
+        "apk" -> Color(0xFF66BB6A) // Android Green
+        else -> Color(0xFF9E9E9E) // Grey
     }
 }
 
