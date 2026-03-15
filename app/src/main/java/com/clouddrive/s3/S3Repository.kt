@@ -127,6 +127,18 @@ class S3Repository(private val config: S3Config) {
         client.putObject(request)
     }
 
+    suspend fun downloadFileAsBytes(key: String): ByteArray {
+        val request = GetObjectRequest {
+            this.bucket = this@S3Repository.bucket
+            this.key = key
+        }
+        var result: ByteArray? = null
+        client.getObject(request) { response ->
+            result = response.body?.toByteArray()
+        }
+        return result ?: throw Exception("Arquivo vazio ou nao encontrado")
+    }
+
     suspend fun downloadFile(key: String, destinationFile: File) {
         val request = GetObjectRequest {
             this.bucket = this@S3Repository.bucket

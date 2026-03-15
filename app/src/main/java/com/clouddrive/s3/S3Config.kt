@@ -9,3 +9,8 @@ data class S3Config(
     val region: String,
     val bucketName: String,
 )
+
+data class S3Profile(
+    val name: String,
+    val config: S3Config,
+)

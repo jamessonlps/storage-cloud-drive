@@ -1,10 +1,11 @@
 package com.clouddrive
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +20,9 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
@@ -48,6 +51,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.clouddrive.s3.SettingsManager
 import com.clouddrive.ui.FileListScreen
 import com.clouddrive.ui.SettingsScreen
@@ -55,7 +60,7 @@ import com.clouddrive.ui.theme.CloudDriveTheme
 
 enum class Screen { Home, Settings }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +71,32 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             CloudDriveTheme {
+                var isAuthenticated by remember { mutableStateOf(false) }
+
+                // Check biometric on launch
+                LaunchedEffect(Unit) {
+                    if (!settingsManager.isBiometricEnabled()) {
+                        isAuthenticated = true
+                    } else {
+                        showBiometricPrompt(
+                            onSuccess = { isAuthenticated = true },
+                            onCancel = { finish() },
+                        )
+                    }
+                }
+
+                if (!isAuthenticated) {
+                    LockScreen(onRetry = {
+                        showBiometricPrompt(
+                            onSuccess = { isAuthenticated = true },
+                            onCancel = { finish() },
+                        )
+                    })
+                    return@CloudDriveTheme
+                }
+
                 val config by settingsManager.configFlow.collectAsState(initial = null)
+                val currentProfileName by settingsManager.currentProfileNameFlow.collectAsState(initial = null)
                 var currentScreen by remember { mutableStateOf(Screen.Home) }
 
                 // Folder navigation state (hoisted)
@@ -93,12 +123,10 @@ class MainActivity : ComponentActivity() {
                 // Shared snackbar
                 val snackbarHostState = remember { SnackbarHostState() }
 
-                // Reset folder state when config becomes null
+                // Reset folder state when config/profile changes
                 LaunchedEffect(config) {
-                    if (config == null) {
-                        currentPrefix = ""
-                        pathStack.clear()
-                    }
+                    currentPrefix = ""
+                    pathStack.clear()
                 }
 
                 // System back button: exit selection mode first
@@ -138,9 +166,16 @@ class MainActivity : ComponentActivity() {
                                                 style = MaterialTheme.typography.titleMedium,
                                             )
                                         }
-                                        if (currentPrefix.isNotEmpty()) {
+                                        val subtitle = buildString {
+                                            if (!currentProfileName.isNullOrBlank()) append(currentProfileName)
+                                            if (currentPrefix.isNotEmpty()) {
+                                                if (isNotEmpty()) append(" ")
+                                                append("/$currentPrefix")
+                                            }
+                                        }
+                                        if (subtitle.isNotEmpty()) {
                                             Text(
-                                                text = "/$currentPrefix",
+                                                text = subtitle,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
@@ -263,7 +298,7 @@ class MainActivity : ComponentActivity() {
                         Screen.Settings -> {
                             SettingsScreen(
                                 settingsManager = settingsManager,
-                                currentConfig = config,
+                                currentProfileName = currentProfileName,
                                 snackbarHostState = snackbarHostState,
                                 onSaveSuccess = { currentScreen = Screen.Home },
                                 modifier = Modifier.padding(padding),
@@ -272,6 +307,78 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun showBiometricPrompt(onSuccess: () -> Unit, onCancel: () -> Unit) {
+        val executor = ContextCompat.getMainExecutor(this)
+
+        val biometricManager = BiometricManager.from(this)
+        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            != BiometricManager.BIOMETRIC_SUCCESS
+        ) {
+            onSuccess()
+            return
+        }
+
+        val callback = object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onSuccess()
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                    errorCode == BiometricPrompt.ERROR_USER_CANCELED
+                ) {
+                    onCancel()
+                }
+            }
+        }
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Cloud Drive S3")
+            .setSubtitle("Autentique-se para acessar seus arquivos")
+            .setNegativeButtonText("Cancelar")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .build()
+
+        BiometricPrompt(this, executor, callback).authenticate(promptInfo)
+    }
+}
+
+@Composable
+private fun LockScreen(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            Icons.Filled.Lock,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            "Cloud Drive S3",
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Autenticacao biometrica necessaria",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onRetry) {
+            Icon(
+                Icons.Filled.Fingerprint,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Autenticar")
         }
     }
 }

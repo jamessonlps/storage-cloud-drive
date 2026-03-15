@@ -111,6 +111,7 @@ fun FileListScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    var previewImageKey by remember { mutableStateOf<S3FileItem?>(null) }
     var continuationToken by remember { mutableStateOf<String?>(null) }
     var hasMore by remember { mutableStateOf(false) }
 
@@ -326,6 +327,7 @@ fun FileListScreen(
                             isSelectionMode = isSelectionMode,
                             isSelected = file.key in selectedKeys,
                             onFolderClick = { onNavigateToFolder(file.key) },
+                            onImageClick = { previewImageKey = file },
                             onDownload = {
                                 val intent = TransferService.downloadIntent(
                                     context, file.key, file.fileName, config
@@ -491,6 +493,16 @@ fun FileListScreen(
             },
         )
     }
+
+    // Image preview dialog
+    previewImageKey?.let { file ->
+        ImagePreviewDialog(
+            imageKey = file.key,
+            fileName = file.fileName,
+            config = config,
+            onDismiss = { previewImageKey = null },
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -500,6 +512,7 @@ private fun FileItemCard(
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onFolderClick: () -> Unit,
+    onImageClick: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
     onLongClick: () -> Unit,
@@ -515,6 +528,8 @@ private fun FileItemCard(
                         onToggleSelect()
                     } else if (file.isFolder) {
                         onFolderClick()
+                    } else if (isImageFile(file.fileName)) {
+                        onImageClick()
                     }
                 },
                 onLongClick = onLongClick,
@@ -587,6 +602,16 @@ private fun FileItemCard(
             }
         }
     }
+}
+
+private val imageExtensions = setOf(
+    "jpg", "jpeg", "png", "gif", "webp", "bmp",
+    "ico", "tiff", "tif", "heic", "heif",
+)
+
+private fun isImageFile(fileName: String): Boolean {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    return ext in imageExtensions
 }
 
 private fun getFileIcon(file: S3FileItem): ImageVector {

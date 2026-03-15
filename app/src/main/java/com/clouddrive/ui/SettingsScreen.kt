@@ -1,18 +1,25 @@
 package com.clouddrive.ui
 
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -32,7 +41,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -49,26 +60,44 @@ private val PAGE_SIZE_OPTIONS = listOf(50, 100, 200, 500)
 @Composable
 fun SettingsScreen(
     settingsManager: SettingsManager,
-    currentConfig: S3Config?,
+    currentProfileName: String?,
     snackbarHostState: SnackbarHostState,
     onSaveSuccess: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val hasExistingConfig = currentConfig != null
-    val maskedAccessKey = remember { settingsManager.getMaskedAccessKey() ?: "" }
+    val profiles = remember { settingsManager.getProfileNames() }.toMutableList()
+    var selectedProfile by remember { mutableStateOf(currentProfileName ?: "") }
+    var profileExpanded by remember { mutableStateOf(false) }
+    var showNewProfileDialog by remember { mutableStateOf(false) }
+    var showDeleteProfileDialog by remember { mutableStateOf(false) }
 
-    // For credentials: show masked placeholder if already saved, empty if not
-    var accessKey by remember { mutableStateOf(if (hasExistingConfig) maskedAccessKey else "") }
-    var secretKey by remember { mutableStateOf(if (hasExistingConfig) MASKED_SECRET else "") }
-    var region by remember { mutableStateOf(currentConfig?.region ?: "us-east-1") }
-    var bucket by remember { mutableStateOf(currentConfig?.bucketName ?: "") }
-    var showSecret by remember { mutableStateOf(false) }
+    // Load config for the selected profile
+    val profileConfig = remember(selectedProfile) {
+        if (selectedProfile.isNotBlank()) settingsManager.getProfileConfig(selectedProfile) else null
+    }
+    val hasExistingConfig = profileConfig != null
+    val maskedAccessKey = remember(selectedProfile) {
+        settingsManager.getMaskedAccessKey(selectedProfile) ?: ""
+    }
+
+    var accessKey by remember(selectedProfile) {
+        mutableStateOf(if (hasExistingConfig) maskedAccessKey else "")
+    }
+    var secretKey by remember(selectedProfile) {
+        mutableStateOf(if (hasExistingConfig) MASKED_SECRET else "")
+    }
+    var region by remember(selectedProfile) {
+        mutableStateOf(profileConfig?.region ?: "us-east-1")
+    }
+    var bucket by remember(selectedProfile) {
+        mutableStateOf(profileConfig?.bucketName ?: "")
+    }
+    var showSecret by remember(selectedProfile) { mutableStateOf(false) }
+    var accessKeyEdited by remember(selectedProfile) { mutableStateOf(false) }
+    var secretKeyEdited by remember(selectedProfile) { mutableStateOf(false) }
+
     var selectedPageSize by remember { mutableIntStateOf(settingsManager.getPageSize()) }
     var pageSizeExpanded by remember { mutableStateOf(false) }
-
-    // Track if user has modified credential fields
-    var accessKeyEdited by remember { mutableStateOf(false) }
-    var secretKeyEdited by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -79,6 +108,66 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // --- Profile Selector ---
+        Text(
+            text = "Perfil",
+            style = MaterialTheme.typography.titleMedium,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = profileExpanded,
+                onExpandedChange = { profileExpanded = !profileExpanded },
+                modifier = Modifier.weight(1f),
+            ) {
+                OutlinedTextField(
+                    value = selectedProfile.ifBlank { "Nenhum perfil" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Perfil ativo") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = profileExpanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                )
+                ExposedDropdownMenu(
+                    expanded = profileExpanded,
+                    onDismissRequest = { profileExpanded = false },
+                ) {
+                    profiles.forEach { name ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                selectedProfile = name
+                                settingsManager.setCurrentProfile(name)
+                                profileExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            IconButton(onClick = { showNewProfileDialog = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "Novo perfil")
+            }
+
+            if (profiles.size > 1 && selectedProfile.isNotBlank()) {
+                IconButton(onClick = { showDeleteProfileDialog = true }) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Excluir perfil",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // --- Credentials ---
         Text(
             text = "Credenciais AWS",
             style = MaterialTheme.typography.titleMedium,
@@ -187,18 +276,70 @@ fun SettingsScreen(
             }
         }
 
+        // Biometric authentication toggle
+        val context = LocalContext.current
+        val biometricManager = remember { BiometricManager.from(context) }
+        val canAuthenticate = remember {
+            biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                BiometricManager.BIOMETRIC_SUCCESS
+        }
+
+        if (canAuthenticate) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Seguranca",
+                style = MaterialTheme.typography.titleMedium,
+            )
+
+            var biometricEnabled by remember { mutableStateOf(settingsManager.isBiometricEnabled()) }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Fingerprint,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        text = "Autenticacao biometrica",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Exigir fingerprint ao abrir o app",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = biometricEnabled,
+                    onCheckedChange = {
+                        biometricEnabled = it
+                        settingsManager.setBiometricEnabled(it)
+                    },
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
-                // If existing config and credentials not edited, only save region/bucket changes
+                if (selectedProfile.isBlank()) {
+                    scope.launch { snackbarHostState.showSnackbar("Crie um perfil primeiro") }
+                    return@Button
+                }
+
                 val finalAccessKey = if (hasExistingConfig && !accessKeyEdited) {
-                    currentConfig!!.accessKeyId
+                    profileConfig!!.accessKeyId
                 } else {
                     accessKey.trim()
                 }
                 val finalSecretKey = if (hasExistingConfig && !secretKeyEdited) {
-                    currentConfig!!.secretAccessKey
+                    profileConfig!!.secretAccessKey
                 } else {
                     secretKey.trim()
                 }
@@ -208,11 +349,12 @@ fun SettingsScreen(
                     return@Button
                 }
 
-                settingsManager.saveConfig(
-                    S3Config(finalAccessKey, finalSecretKey, region.trim(), bucket.trim())
+                settingsManager.saveProfile(
+                    selectedProfile,
+                    S3Config(finalAccessKey, finalSecretKey, region.trim(), bucket.trim()),
                 )
                 scope.launch {
-                    snackbarHostState.showSnackbar("Configuracoes salvas com criptografia!")
+                    snackbarHostState.showSnackbar("Perfil \"$selectedProfile\" salvo!")
                     onSaveSuccess()
                 }
             },
@@ -223,20 +365,89 @@ fun SettingsScreen(
 
         OutlinedButton(
             onClick = {
-                settingsManager.clearConfig()
+                settingsManager.clearAllProfiles()
                 accessKey = ""
                 secretKey = ""
                 region = "us-east-1"
                 bucket = ""
                 accessKeyEdited = false
                 secretKeyEdited = false
+                selectedProfile = ""
+                profiles.clear()
                 scope.launch {
-                    snackbarHostState.showSnackbar("Configuracoes removidas")
+                    snackbarHostState.showSnackbar("Todas as configuracoes removidas")
                 }
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Limpar Configuracoes")
+            Text("Limpar Tudo")
         }
+    }
+
+    // New profile dialog
+    if (showNewProfileDialog) {
+        var newProfileName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showNewProfileDialog = false },
+            title = { Text("Novo Perfil") },
+            text = {
+                OutlinedTextField(
+                    value = newProfileName,
+                    onValueChange = { newProfileName = it },
+                    label = { Text("Nome do perfil") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newProfileName.trim()
+                        if (name.isNotBlank() && name !in profiles) {
+                            profiles.add(name)
+                            selectedProfile = name
+                            settingsManager.setCurrentProfile(name)
+                            showNewProfileDialog = false
+                        }
+                    },
+                ) {
+                    Text("Criar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewProfileDialog = false }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+
+    // Delete profile confirmation dialog
+    if (showDeleteProfileDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteProfileDialog = false },
+            title = { Text("Excluir perfil") },
+            text = { Text("Deseja excluir o perfil \"$selectedProfile\"?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val nameToDelete = selectedProfile
+                        profiles.remove(nameToDelete)
+                        settingsManager.deleteProfile(nameToDelete)
+                        selectedProfile = settingsManager.getCurrentProfileName() ?: ""
+                        showDeleteProfileDialog = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Perfil \"$nameToDelete\" excluido")
+                        }
+                    },
+                ) {
+                    Text("Excluir", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteProfileDialog = false }) {
+                    Text("Cancelar")
+                }
+            },
+        )
     }
 }
