@@ -93,8 +93,8 @@ com.clouddrive/
 
 ## Pre-requisitos
 
-- **Android Studio** Hedgehog (2023.1.1) ou superior
 - **JDK 17**
+- **Android SDK** (via Android Studio ou command-line tools)
 - **Conta AWS** com um bucket S3 criado
 - **Credenciais AWS** (Access Key ID e Secret Access Key) com permissoes no bucket
 
@@ -134,15 +134,68 @@ git clone https://github.com/jamessonlps/storage-cloud-drive.git
 cd storage-cloud-drive
 ```
 
-### 2. Abrir no Android Studio
+### 2. Configurar o Android SDK
 
-Abra o projeto pelo Android Studio e aguarde a sincronizacao do Gradle.
+#### Opcao A: Sem Android Studio (via terminal)
 
-### 3. Executar no dispositivo
+Instale as ferramentas de linha de comando do Android:
 
-Conecte um dispositivo Android (API 26+) ou use um emulador, e execute o app.
+```bash
+# macOS (Homebrew)
+brew install --cask android-commandlinetools
 
-### 4. Configurar o S3
+# Aceitar licencas
+yes | sdkmanager --sdk_root="/opt/homebrew/share/android-commandlinetools" --licenses
+
+# Instalar componentes necessarios
+sdkmanager --sdk_root="/opt/homebrew/share/android-commandlinetools" \
+  "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+```
+
+Crie o arquivo `local.properties` na raiz do projeto:
+
+```properties
+sdk.dir=/opt/homebrew/share/android-commandlinetools
+```
+
+#### Opcao B: Com Android Studio
+
+Abra o projeto pelo Android Studio e aguarde a sincronizacao do Gradle. O SDK sera configurado automaticamente.
+
+### 3. Compilar o APK
+
+```bash
+./gradlew assembleDebug
+```
+
+O APK sera gerado em `app/build/outputs/apk/debug/app-debug.apk`.
+
+### 4. Instalar no celular via USB (sem Android Studio)
+
+1. **Ative a Depuracao USB** no celular:
+   - Va em **Configuracoes > Sobre o telefone** e toque **7 vezes** em "Numero da versao"
+   - Va em **Configuracoes > Opcoes do desenvolvedor** e ative **Depuracao USB**
+
+2. **Conecte o celular via USB** e selecione o modo **"Transferir arquivos"**
+
+3. **Aceite a autorizacao** de depuracao que aparecera na tela do celular
+
+4. **Instale o APK**:
+
+```bash
+# Adicione o adb ao PATH (macOS com Homebrew)
+export PATH="/opt/homebrew/share/android-commandlinetools/platform-tools:$PATH"
+
+# Verifique se o celular foi detectado
+adb devices
+
+# Instale o app
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+> Para reinstalar apos alteracoes, use `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+
+### 5. Configurar o S3
 
 Na primeira execucao, a tela de configuracoes sera exibida automaticamente. Preencha:
 
@@ -220,9 +273,12 @@ storage-cloud-drive/
 |-- settings.gradle.kts                 # Configuracao de repositorios e modulos
 |-- gradle.properties                   # Propriedades do Gradle (JVM, AndroidX)
 |-- .gitignore                          # Arquivos ignorados pelo Git
+|-- gradlew                            # Script Gradle wrapper (Linux/macOS)
+|-- gradlew.bat                        # Script Gradle wrapper (Windows)
 |-- gradle/
 |   |-- wrapper/
-|       |-- gradle-wrapper.properties   # Versao do Gradle (8.5)
+|       |-- gradle-wrapper.jar         # Gradle wrapper JAR
+|       |-- gradle-wrapper.properties  # Versao do Gradle (8.5)
 |-- app/
     |-- build.gradle.kts                # Build do modulo app - dependencias
     |-- proguard-rules.pro              # Regras ProGuard para AWS SDK
@@ -244,6 +300,11 @@ storage-cloud-drive/
         |       |-- theme/
         |           |-- Theme.kt        # Tema Material 3 + Dynamic Colors
         |-- res/
+            |-- drawable/
+            |   |-- ic_launcher_background.xml  # Fundo do icone (azul)
+            |   |-- ic_launcher_foreground.xml  # Icone do app (nuvem + seta)
+            |-- mipmap-anydpi-v26/
+            |   |-- ic_launcher.xml     # Adaptive icon definition
             |-- values/
             |   |-- strings.xml         # Strings do app
             |   |-- themes.xml          # Tema base XML
@@ -269,10 +330,11 @@ storage-cloud-drive/
 ### Build de Debug
 
 ```bash
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools  # se nao estiver configurado
 ./gradlew assembleDebug
 ```
 
-O APK sera gerado em `app/build/outputs/apk/debug/`.
+O APK sera gerado em `app/build/outputs/apk/debug/app-debug.apk`.
 
 ### Build de Release
 
@@ -281,6 +343,12 @@ O APK sera gerado em `app/build/outputs/apk/debug/`.
 ```
 
 > Nota: para builds de release, configure a assinatura do APK em `app/build.gradle.kts`.
+
+### Instalar diretamente no dispositivo
+
+```bash
+./gradlew installDebug   # compila e instala via ADB automaticamente
+```
 
 ---
 
