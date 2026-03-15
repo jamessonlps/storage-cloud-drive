@@ -15,8 +15,12 @@ class SettingsManager(context: Context) {
         private const val KEY_CURRENT_PROFILE = "current_profile"
         private const val KEY_PAGE_SIZE = "page_size"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val DEFAULT_PROFILE_NAME = "Padrao"
         const val DEFAULT_PAGE_SIZE = 100
+        const val THEME_SYSTEM = "system"
+        const val THEME_LIGHT = "light"
+        const val THEME_DARK = "dark"
 
         // Legacy keys (pre-multi-profile)
         private const val LEGACY_KEY_ACCESS_KEY = "access_key_id"
@@ -195,5 +199,11 @@ class SettingsManager(context: Context) {
 
     fun setBiometricEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
+    }
+
+    fun getThemeMode(): String = prefs.getString(KEY_THEME_MODE, THEME_SYSTEM) ?: THEME_SYSTEM
+
+    fun saveThemeMode(mode: String) {
+        prefs.edit().putString(KEY_THEME_MODE, mode).apply()
     }
 }

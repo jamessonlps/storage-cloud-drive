@@ -63,6 +63,7 @@ fun SettingsScreen(
     currentProfileName: String?,
     snackbarHostState: SnackbarHostState,
     onSaveSuccess: () -> Unit,
+    onThemeModeChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val profiles = remember { settingsManager.getProfileNames() }.toMutableList()
@@ -98,6 +99,8 @@ fun SettingsScreen(
 
     var selectedPageSize by remember { mutableIntStateOf(settingsManager.getPageSize()) }
     var pageSizeExpanded by remember { mutableStateOf(false) }
+    var selectedThemeMode by remember { mutableStateOf(settingsManager.getThemeMode()) }
+    var themeModeExpanded by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -273,6 +276,63 @@ fun SettingsScreen(
                         },
                     )
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Aparencia",
+            style = MaterialTheme.typography.titleMedium,
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = themeModeExpanded,
+            onExpandedChange = { themeModeExpanded = !themeModeExpanded },
+        ) {
+            OutlinedTextField(
+                value = when (selectedThemeMode) {
+                    SettingsManager.THEME_LIGHT -> "Claro"
+                    SettingsManager.THEME_DARK -> "Escuro"
+                    else -> "Sistema"
+                },
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Tema") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeModeExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+            )
+            ExposedDropdownMenu(
+                expanded = themeModeExpanded,
+                onDismissRequest = { themeModeExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Sistema") },
+                    onClick = {
+                        selectedThemeMode = SettingsManager.THEME_SYSTEM
+                        settingsManager.saveThemeMode(SettingsManager.THEME_SYSTEM)
+                        onThemeModeChanged(SettingsManager.THEME_SYSTEM)
+                        themeModeExpanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Claro") },
+                    onClick = {
+                        selectedThemeMode = SettingsManager.THEME_LIGHT
+                        settingsManager.saveThemeMode(SettingsManager.THEME_LIGHT)
+                        onThemeModeChanged(SettingsManager.THEME_LIGHT)
+                        themeModeExpanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Escuro") },
+                    onClick = {
+                        selectedThemeMode = SettingsManager.THEME_DARK
+                        settingsManager.saveThemeMode(SettingsManager.THEME_DARK)
+                        onThemeModeChanged(SettingsManager.THEME_DARK)
+                        themeModeExpanded = false
+                    },
+                )
             }
         }
 
