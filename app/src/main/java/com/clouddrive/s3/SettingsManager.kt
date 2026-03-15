@@ -1,47 +1,68 @@
 package com.clouddrive.s3
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "s3_settings")
-
-class SettingsManager(private val context: Context) {
+class SettingsManager(context: Context) {
 
     companion object {
-        private val KEY_ACCESS_KEY = stringPreferencesKey("access_key_id")
-        private val KEY_SECRET_KEY = stringPreferencesKey("secret_access_key")
-        private val KEY_REGION = stringPreferencesKey("region")
-        private val KEY_BUCKET = stringPreferencesKey("bucket_name")
+        private const val PREFS_NAME = "s3_encrypted_settings"
+        private const val KEY_ACCESS_KEY = "access_key_id"
+        private const val KEY_SECRET_KEY = "secret_access_key"
+        private const val KEY_REGION = "region"
+        private const val KEY_BUCKET = "bucket_name"
     }
 
-    val configFlow: Flow<S3Config?> = context.dataStore.data.map { prefs ->
-        val accessKey = prefs[KEY_ACCESS_KEY] ?: return@map null
-        val secretKey = prefs[KEY_SECRET_KEY] ?: return@map null
-        val region = prefs[KEY_REGION] ?: return@map null
-        val bucket = prefs[KEY_BUCKET] ?: return@map null
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
+        context,
+        PREFS_NAME,
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+
+    private val _configFlow = MutableStateFlow(readConfig())
+    val configFlow: Flow<S3Config?> = _configFlow
+
+    private fun readConfig(): S3Config? {
+        val accessKey = prefs.getString(KEY_ACCESS_KEY, null) ?: return null
+        val secretKey = prefs.getString(KEY_SECRET_KEY, null) ?: return null
+        val region = prefs.getString(KEY_REGION, null) ?: return null
+        val bucket = prefs.getString(KEY_BUCKET, null) ?: return null
         if (accessKey.isBlank() || secretKey.isBlank() || region.isBlank() || bucket.isBlank()) {
-            null
-        } else {
-            S3Config(accessKey, secretKey, region, bucket)
+            return null
         }
+        return S3Config(accessKey, secretKey, region, bucket)
     }
 
-    suspend fun saveConfig(config: S3Config) {
-        context.dataStore.edit { prefs ->
-            prefs[KEY_ACCESS_KEY] = config.accessKeyId
-            prefs[KEY_SECRET_KEY] = config.secretAccessKey
-            prefs[KEY_REGION] = config.region
-            prefs[KEY_BUCKET] = config.bucketName
-        }
+    fun saveConfig(config: S3Config) {
+        prefs.edit()
+            .putString(KEY_ACCESS_KEY, config.accessKeyId)
+            .putString(KEY_SECRET_KEY, config.secretAccessKey)
+            .putString(KEY_REGION, config.region)
+            .putString(KEY_BUCKET, config.bucketName)
+            .apply()
+        _configFlow.value = readConfig()
     }
 
-    suspend fun clearConfig() {
-        context.dataStore.edit { it.clear() }
+    fun clearConfig() {
+        prefs.edit().clear().apply()
+        _configFlow.value = null
     }
+
+    fun getMaskedAccessKey(): String? {
+        val key = prefs.getString(KEY_ACCESS_KEY, null) ?: return null
+        if (key.length <= 8) return "••••••••"
+        return key.take(4) + "••••" + key.takeLast(4)
+    }
+
+    fun hasCredentials(): Boolean = readConfig() != null
 }

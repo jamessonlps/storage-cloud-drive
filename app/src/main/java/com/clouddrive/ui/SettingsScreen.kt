@@ -36,6 +36,8 @@ import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.SettingsManager
 import kotlinx.coroutines.launch
 
+private const val MASKED_SECRET = "••••••••••••••••"
+
 @Composable
 fun SettingsScreen(
     settingsManager: SettingsManager,
@@ -44,11 +46,20 @@ fun SettingsScreen(
     onSaveSuccess: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var accessKey by remember { mutableStateOf(currentConfig?.accessKeyId ?: "") }
-    var secretKey by remember { mutableStateOf(currentConfig?.secretAccessKey ?: "") }
+    val hasExistingConfig = currentConfig != null
+    val maskedAccessKey = remember { settingsManager.getMaskedAccessKey() ?: "" }
+
+    // For credentials: show masked placeholder if already saved, empty if not
+    var accessKey by remember { mutableStateOf(if (hasExistingConfig) maskedAccessKey else "") }
+    var secretKey by remember { mutableStateOf(if (hasExistingConfig) MASKED_SECRET else "") }
     var region by remember { mutableStateOf(currentConfig?.region ?: "us-east-1") }
     var bucket by remember { mutableStateOf(currentConfig?.bucketName ?: "") }
     var showSecret by remember { mutableStateOf(false) }
+
+    // Track if user has modified credential fields
+    var accessKeyEdited by remember { mutableStateOf(false) }
+    var secretKeyEdited by remember { mutableStateOf(false) }
+
     val scope = rememberCoroutineScope()
 
     Column(
@@ -63,28 +74,46 @@ fun SettingsScreen(
             style = MaterialTheme.typography.titleMedium,
         )
 
+        if (hasExistingConfig) {
+            Text(
+                text = "Credenciais salvas e criptografadas. Para alterar, insira novos valores.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         OutlinedTextField(
             value = accessKey,
-            onValueChange = { accessKey = it },
+            onValueChange = {
+                accessKey = it
+                accessKeyEdited = true
+            },
             label = { Text("Access Key ID") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+            readOnly = hasExistingConfig && !accessKeyEdited,
         )
 
         OutlinedTextField(
             value = secretKey,
-            onValueChange = { secretKey = it },
+            onValueChange = {
+                secretKey = it
+                secretKeyEdited = true
+            },
             label = { Text("Secret Access Key") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
-            visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
+            visualTransformation = if (showSecret && secretKeyEdited) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            readOnly = hasExistingConfig && !secretKeyEdited,
             trailingIcon = {
-                IconButton(onClick = { showSecret = !showSecret }) {
-                    Icon(
-                        imageVector = if (showSecret) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (showSecret) "Esconder" else "Mostrar",
-                    )
+                if (secretKeyEdited) {
+                    IconButton(onClick = { showSecret = !showSecret }) {
+                        Icon(
+                            imageVector = if (showSecret) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (showSecret) "Esconder" else "Mostrar",
+                        )
+                    }
                 }
             },
         )
@@ -116,15 +145,28 @@ fun SettingsScreen(
 
         Button(
             onClick = {
-                if (accessKey.isBlank() || secretKey.isBlank() || region.isBlank() || bucket.isBlank()) {
+                // If existing config and credentials not edited, only save region/bucket changes
+                val finalAccessKey = if (hasExistingConfig && !accessKeyEdited) {
+                    currentConfig!!.accessKeyId
+                } else {
+                    accessKey.trim()
+                }
+                val finalSecretKey = if (hasExistingConfig && !secretKeyEdited) {
+                    currentConfig!!.secretAccessKey
+                } else {
+                    secretKey.trim()
+                }
+
+                if (finalAccessKey.isBlank() || finalSecretKey.isBlank() || region.isBlank() || bucket.isBlank()) {
                     scope.launch { snackbarHostState.showSnackbar("Preencha todos os campos") }
                     return@Button
                 }
+
+                settingsManager.saveConfig(
+                    S3Config(finalAccessKey, finalSecretKey, region.trim(), bucket.trim())
+                )
                 scope.launch {
-                    settingsManager.saveConfig(
-                        S3Config(accessKey.trim(), secretKey.trim(), region.trim(), bucket.trim())
-                    )
-                    snackbarHostState.showSnackbar("Configuracoes salvas!")
+                    snackbarHostState.showSnackbar("Configuracoes salvas com criptografia!")
                     onSaveSuccess()
                 }
             },
@@ -135,12 +177,14 @@ fun SettingsScreen(
 
         OutlinedButton(
             onClick = {
+                settingsManager.clearConfig()
+                accessKey = ""
+                secretKey = ""
+                region = "us-east-1"
+                bucket = ""
+                accessKeyEdited = false
+                secretKeyEdited = false
                 scope.launch {
-                    settingsManager.clearConfig()
-                    accessKey = ""
-                    secretKey = ""
-                    region = "us-east-1"
-                    bucket = ""
                     snackbarHostState.showSnackbar("Configuracoes removidas")
                 }
             },
