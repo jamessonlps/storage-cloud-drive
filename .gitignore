@@ -9,3 +9,7 @@
 .cxx
 local.properties
 /app/build
+/build-tools
+/platform-tools
+/platforms
+/licenses
