@@ -14,6 +14,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +27,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,6 +43,9 @@ import kotlinx.coroutines.launch
 
 private const val MASKED_SECRET = "••••••••••••••••"
 
+private val PAGE_SIZE_OPTIONS = listOf(50, 100, 200, 500)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     settingsManager: SettingsManager,
@@ -55,6 +63,8 @@ fun SettingsScreen(
     var region by remember { mutableStateOf(currentConfig?.region ?: "us-east-1") }
     var bucket by remember { mutableStateOf(currentConfig?.bucketName ?: "") }
     var showSecret by remember { mutableStateOf(false) }
+    var selectedPageSize by remember { mutableIntStateOf(settingsManager.getPageSize()) }
+    var pageSizeExpanded by remember { mutableStateOf(false) }
 
     // Track if user has modified credential fields
     var accessKeyEdited by remember { mutableStateOf(false) }
@@ -140,6 +150,42 @@ fun SettingsScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Configuracoes de Listagem",
+            style = MaterialTheme.typography.titleMedium,
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = pageSizeExpanded,
+            onExpandedChange = { pageSizeExpanded = !pageSizeExpanded },
+        ) {
+            OutlinedTextField(
+                value = "$selectedPageSize itens por pagina",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Itens por lote") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = pageSizeExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+            )
+            ExposedDropdownMenu(
+                expanded = pageSizeExpanded,
+                onDismissRequest = { pageSizeExpanded = false },
+            ) {
+                PAGE_SIZE_OPTIONS.forEach { size ->
+                    DropdownMenuItem(
+                        text = { Text("$size itens") },
+                        onClick = {
+                            selectedPageSize = size
+                            settingsManager.savePageSize(size)
+                            pageSizeExpanded = false
+                        },
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

@@ -15,6 +15,8 @@ class SettingsManager(context: Context) {
         private const val KEY_SECRET_KEY = "secret_access_key"
         private const val KEY_REGION = "region"
         private const val KEY_BUCKET = "bucket_name"
+        private const val KEY_PAGE_SIZE = "page_size"
+        const val DEFAULT_PAGE_SIZE = 100
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -65,4 +67,10 @@ class SettingsManager(context: Context) {
     }
 
     fun hasCredentials(): Boolean = readConfig() != null
+
+    fun getPageSize(): Int = prefs.getInt(KEY_PAGE_SIZE, DEFAULT_PAGE_SIZE)
+
+    fun savePageSize(size: Int) {
+        prefs.edit().putInt(KEY_PAGE_SIZE, size).apply()
+    }
 }

@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,6 +73,10 @@ class MainActivity : ComponentActivity() {
                 var refreshTrigger by remember { mutableStateOf(0) }
                 var showNewFolderDialog by remember { mutableStateOf(false) }
 
+                // Item count state for TopAppBar
+                var itemCount by remember { mutableIntStateOf(0) }
+                var itemsHasMore by remember { mutableStateOf(false) }
+
                 // Shared snackbar
                 val snackbarHostState = remember { SnackbarHostState() }
 
@@ -98,10 +103,17 @@ class MainActivity : ComponentActivity() {
                             title = {
                                 when (currentScreen) {
                                     Screen.Home -> Column {
-                                        Text(
-                                            "Cloud Drive S3",
-                                            style = MaterialTheme.typography.titleMedium,
-                                        )
+                                        if (config != null && itemCount > 0) {
+                                            Text(
+                                                text = if (itemsHasMore) "Exibindo $itemCount itens..." else "Exibindo todos os $itemCount itens",
+                                                style = MaterialTheme.typography.titleMedium,
+                                            )
+                                        } else {
+                                            Text(
+                                                "Cloud Drive S3",
+                                                style = MaterialTheme.typography.titleMedium,
+                                            )
+                                        }
                                         if (currentPrefix.isNotEmpty()) {
                                             Text(
                                                 text = "/$currentPrefix",
@@ -172,6 +184,11 @@ class MainActivity : ComponentActivity() {
                                     refreshTrigger = refreshTrigger,
                                     showNewFolderDialog = showNewFolderDialog,
                                     onDismissNewFolderDialog = { showNewFolderDialog = false },
+                                    pageSize = settingsManager.getPageSize(),
+                                    onItemCountChanged = { count, hasMore ->
+                                        itemCount = count
+                                        itemsHasMore = hasMore
+                                    },
                                     modifier = Modifier.padding(padding),
                                 )
                             }

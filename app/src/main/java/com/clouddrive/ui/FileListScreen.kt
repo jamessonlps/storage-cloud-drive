@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CloudDownload
@@ -48,6 +49,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +79,8 @@ fun FileListScreen(
     refreshTrigger: Int,
     showNewFolderDialog: Boolean,
     onDismissNewFolderDialog: () -> Unit,
+    pageSize: Int,
+    onItemCountChanged: (count: Int, hasMore: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -85,21 +89,53 @@ fun FileListScreen(
 
     var files by remember { mutableStateOf<List<S3FileItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var isLoadingMore by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
+    var continuationToken by remember { mutableStateOf<String?>(null) }
+    var hasMore by remember { mutableStateOf(false) }
 
     fun loadFiles() {
         scope.launch {
             isLoading = true
             errorMessage = null
+            continuationToken = null
+            hasMore = false
+            files = emptyList()
             try {
-                files = withContext(Dispatchers.IO) {
-                    repository.listFiles(currentPrefix)
+                val result = withContext(Dispatchers.IO) {
+                    repository.listFilesPaged(currentPrefix, pageSize)
                 }
+                files = result.items
+                continuationToken = result.nextToken
+                hasMore = result.nextToken != null
+                onItemCountChanged(result.items.size, hasMore)
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Erro desconhecido"
+                onItemCountChanged(0, false)
             } finally {
                 isLoading = false
+            }
+        }
+    }
+
+    fun loadMore() {
+        val token = continuationToken ?: return
+        if (isLoadingMore) return
+        scope.launch {
+            isLoadingMore = true
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    repository.listFilesPaged(currentPrefix, pageSize, token)
+                }
+                files = files + result.items
+                continuationToken = result.nextToken
+                hasMore = result.nextToken != null
+                onItemCountChanged(files.size, hasMore)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao carregar mais: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                isLoadingMore = false
             }
         }
     }
@@ -153,6 +189,18 @@ fun FileListScreen(
         Toast.makeText(context, "Upload iniciado: $fileName", Toast.LENGTH_SHORT).show()
     }
 
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= files.size - 5 && hasMore && !isLoadingMore
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) loadMore()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         when {
             isLoading -> {
@@ -191,7 +239,7 @@ fun FileListScreen(
                 }
             }
             else -> {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(files, key = { it.key }) { file ->
                         FileItemCard(
                             file = file,
@@ -209,6 +257,17 @@ fun FileListScreen(
                             },
                             onDelete = { showDeleteDialog = file },
                         )
+                    }
+
+                    if (isLoadingMore) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                            }
+                        }
                     }
 
                     item { Spacer(modifier = Modifier.height(80.dp)) }

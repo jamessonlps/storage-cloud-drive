@@ -3,6 +3,7 @@ package com.clouddrive.s3
 import aws.sdk.kotlin.services.s3.model.DeleteObjectRequest
 import aws.sdk.kotlin.services.s3.model.GetObjectRequest
 import aws.sdk.kotlin.services.s3.model.ListObjectsV2Request
+import aws.sdk.kotlin.services.s3.model.ListObjectsV2Response
 import aws.sdk.kotlin.services.s3.model.PutObjectRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
@@ -33,6 +34,11 @@ data class S3FileItem(
         }
 }
 
+data class PagedResult(
+    val items: List<S3FileItem>,
+    val nextToken: String?,
+)
+
 class S3Repository(private val config: S3Config) {
 
     private val client get() = S3ClientProvider.getClient(config)
@@ -46,6 +52,34 @@ class S3Repository(private val config: S3Config) {
         }
 
         val response = client.listObjectsV2(request)
+        return parseResponse(response, prefix)
+    }
+
+    suspend fun listFilesPaged(
+        prefix: String = "",
+        maxKeys: Int = 100,
+        continuationToken: String? = null,
+    ): PagedResult {
+        val request = ListObjectsV2Request {
+            this.bucket = this@S3Repository.bucket
+            this.prefix = prefix
+            this.delimiter = "/"
+            this.maxKeys = maxKeys
+            if (continuationToken != null) {
+                this.continuationToken = continuationToken
+            }
+        }
+
+        val response = client.listObjectsV2(request)
+        val items = parseResponse(response, prefix)
+        val nextToken = if (response.isTruncated == true) response.nextContinuationToken else null
+        return PagedResult(items = items, nextToken = nextToken)
+    }
+
+    private fun parseResponse(
+        response: ListObjectsV2Response,
+        prefix: String,
+    ): List<S3FileItem> {
         val items = mutableListOf<S3FileItem>()
 
         // Add folders (common prefixes)
