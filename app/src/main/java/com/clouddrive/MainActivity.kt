@@ -209,16 +209,16 @@ class MainActivity : FragmentActivity() {
                                         }
                                     }
                                     currentScreen == Screen.Transfers -> Text(
-                                        "Transferencias",
+                                        "Transferências",
                                         style = MaterialTheme.typography.titleMedium,
                                     )
-                                    else -> Text("Configuracoes AWS S3")
+                                    else -> Text("Configurações AWS S3")
                                 }
                             },
                             navigationIcon = {
                                 if (currentScreen == Screen.Home && isSelectionMode) {
                                     IconButton(onClick = { clearSelectionTrigger++ }) {
-                                        Icon(Icons.Filled.Close, contentDescription = "Cancelar selecao")
+                                        Icon(Icons.Filled.Close, contentDescription = "Cancelar seleção")
                                     }
                                 } else if (currentScreen == Screen.Home && pathStack.isNotEmpty()) {
                                     IconButton(onClick = {
@@ -267,7 +267,7 @@ class MainActivity : FragmentActivity() {
                                     }
                                     if (hasCompleted) {
                                         IconButton(onClick = { TransferManager.clearCompleted() }) {
-                                            Icon(Icons.Filled.ClearAll, contentDescription = "Limpar concluidos")
+                                            Icon(Icons.Filled.ClearAll, contentDescription = "Limpar concluídos")
                                         }
                                     }
                                 } else if (currentScreen == Screen.Home && config != null) {
@@ -311,13 +311,13 @@ class MainActivity : FragmentActivity() {
                                         Icon(Icons.Filled.SwapVert, contentDescription = null)
                                     }
                                 },
-                                label = { Text("Transferencias") },
+                                label = { Text("Transferências") },
                             )
                             NavigationBarItem(
                                 selected = currentScreen == Screen.Settings,
                                 onClick = { currentScreen = Screen.Settings },
                                 icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                                label = { Text("Configuracoes") },
+                                label = { Text("Configurações") },
                             )
                         }
                     },
@@ -502,7 +502,7 @@ private fun LockScreen(onRetry: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Autenticacao biometrica necessaria",
+            "Autenticação biométrica necessária",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -542,13 +542,13 @@ private fun NoCredentialsScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Acesse as configuracoes para conectar ao seu bucket S3",
+            "Acesse as configurações para conectar ao seu bucket S3",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onGoToSettings) {
-            Text("Ir para Configuracoes")
+            Text("Ir para Configurações")
         }
     }
 }
