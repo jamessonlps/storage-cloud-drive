@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.clouddrive.crypto.EncryptionManager
+import com.clouddrive.s3.BucketEntry
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.SettingsManager
 import kotlinx.coroutines.launch
@@ -92,9 +93,12 @@ fun SettingsScreen(
     var region by remember(selectedProfile) {
         mutableStateOf(profileConfig?.region ?: "us-east-1")
     }
-    var bucket by remember(selectedProfile) {
-        mutableStateOf(profileConfig?.bucketName ?: "")
+    var buckets by remember(selectedProfile) {
+        mutableStateOf(
+            if (selectedProfile.isNotBlank()) settingsManager.getBuckets(selectedProfile) else emptyList(),
+        )
     }
+    var showAddBucketDialog by remember { mutableStateOf(false) }
     var showSecret by remember(selectedProfile) { mutableStateOf(false) }
     var accessKeyEdited by remember(selectedProfile) { mutableStateOf(false) }
     var secretKeyEdited by remember(selectedProfile) { mutableStateOf(false) }
@@ -225,7 +229,7 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Configuração do Bucket",
+            text = "Região",
             style = MaterialTheme.typography.titleMedium,
         )
 
@@ -237,13 +241,61 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        OutlinedTextField(
-            value = bucket,
-            onValueChange = { bucket = it },
-            label = { Text("Nome do Bucket") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Buckets",
+            style = MaterialTheme.typography.titleMedium,
         )
+
+        if (buckets.isEmpty()) {
+            Text(
+                text = "Nenhum bucket cadastrado",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            buckets.forEach { bucket ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = bucket.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = bucket.awsName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = {
+                        if (selectedProfile.isNotBlank()) {
+                            settingsManager.removeBucket(selectedProfile, bucket.awsName)
+                            buckets = settingsManager.getBuckets(selectedProfile)
+                        }
+                    }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Remover bucket",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = { showAddBucketDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = selectedProfile.isNotBlank(),
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Adicionar Bucket")
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -453,14 +505,14 @@ fun SettingsScreen(
                     secretKey.trim()
                 }
 
-                if (finalAccessKey.isBlank() || finalSecretKey.isBlank() || region.isBlank() || bucket.isBlank()) {
-                    scope.launch { snackbarHostState.showSnackbar("Preencha todos os campos") }
+                if (finalAccessKey.isBlank() || finalSecretKey.isBlank() || region.isBlank()) {
+                    scope.launch { snackbarHostState.showSnackbar("Preencha todos os campos de credenciais") }
                     return@Button
                 }
 
                 settingsManager.saveProfile(
                     selectedProfile,
-                    S3Config(finalAccessKey, finalSecretKey, region.trim(), bucket.trim()),
+                    S3Config(finalAccessKey, finalSecretKey, region.trim(), bucketName = ""),
                 )
                 scope.launch {
                     snackbarHostState.showSnackbar("Perfil \"$selectedProfile\" salvo!")
@@ -478,7 +530,7 @@ fun SettingsScreen(
                 accessKey = ""
                 secretKey = ""
                 region = "us-east-1"
-                bucket = ""
+                buckets = emptyList()
                 accessKeyEdited = false
                 secretKeyEdited = false
                 selectedProfile = ""
@@ -524,6 +576,55 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewProfileDialog = false }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+
+    // Add bucket dialog
+    if (showAddBucketDialog) {
+        var newBucketAwsName by remember { mutableStateOf("") }
+        var newBucketDisplayName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddBucketDialog = false },
+            title = { Text("Adicionar Bucket") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newBucketAwsName,
+                        onValueChange = { newBucketAwsName = it },
+                        label = { Text("Nome do Bucket (AWS)") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = newBucketDisplayName,
+                        onValueChange = { newBucketDisplayName = it },
+                        label = { Text("Nome de exibição") },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val awsName = newBucketAwsName.trim()
+                        val displayName = newBucketDisplayName.trim().ifBlank { awsName }
+                        if (awsName.isNotBlank() && selectedProfile.isNotBlank()) {
+                            settingsManager.addBucket(
+                                selectedProfile,
+                                BucketEntry(awsName = awsName, displayName = displayName),
+                            )
+                            buckets = settingsManager.getBuckets(selectedProfile)
+                            showAddBucketDialog = false
+                        }
+                    },
+                ) {
+                    Text("Adicionar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddBucketDialog = false }) {
                     Text("Cancelar")
                 }
             },

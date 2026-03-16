@@ -6,6 +6,8 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 
 class SettingsManager(context: Context) {
 
@@ -72,11 +74,13 @@ class SettingsManager(context: Context) {
 
         // Migrate to default profile
         val name = DEFAULT_PROFILE_NAME
+        val bucketsJson = JSONArray()
+        bucketsJson.put(JSONObject().put("awsName", bucket).put("displayName", bucket))
         prefs.edit()
             .putString(profileKey(name, "access_key_id"), accessKey)
             .putString(profileKey(name, "secret_access_key"), secretKey)
             .putString(profileKey(name, "region"), region)
-            .putString(profileKey(name, "bucket_name"), bucket)
+            .putString(profileKey(name, "buckets"), bucketsJson.toString())
             .putString(KEY_PROFILE_LIST, name)
             .putString(KEY_CURRENT_PROFILE, name)
             // Remove legacy keys
@@ -113,7 +117,6 @@ class SettingsManager(context: Context) {
             .putString(profileKey(name, "access_key_id"), config.accessKeyId)
             .putString(profileKey(name, "secret_access_key"), config.secretAccessKey)
             .putString(profileKey(name, "region"), config.region)
-            .putString(profileKey(name, "bucket_name"), config.bucketName)
             .putString(KEY_PROFILE_LIST, profiles.joinToString(","))
             .putString(KEY_CURRENT_PROFILE, name)
             .apply()
@@ -130,6 +133,7 @@ class SettingsManager(context: Context) {
             .remove(profileKey(name, "secret_access_key"))
             .remove(profileKey(name, "region"))
             .remove(profileKey(name, "bucket_name"))
+            .remove(profileKey(name, "buckets"))
 
         if (profiles.isEmpty()) {
             editor.remove(KEY_PROFILE_LIST).remove(KEY_CURRENT_PROFILE).apply()
@@ -154,6 +158,7 @@ class SettingsManager(context: Context) {
             editor.remove(profileKey(p, "secret_access_key"))
             editor.remove(profileKey(p, "region"))
             editor.remove(profileKey(p, "bucket_name"))
+            editor.remove(profileKey(p, "buckets"))
         }
         editor.remove(KEY_PROFILE_LIST).remove(KEY_CURRENT_PROFILE).apply()
         _currentProfileNameFlow.value = null
@@ -166,11 +171,10 @@ class SettingsManager(context: Context) {
         val accessKey = prefs.getString(profileKey(name, "access_key_id"), null) ?: return null
         val secretKey = prefs.getString(profileKey(name, "secret_access_key"), null) ?: return null
         val region = prefs.getString(profileKey(name, "region"), null) ?: return null
-        val bucket = prefs.getString(profileKey(name, "bucket_name"), null) ?: return null
-        if (accessKey.isBlank() || secretKey.isBlank() || region.isBlank() || bucket.isBlank()) {
+        if (accessKey.isBlank() || secretKey.isBlank() || region.isBlank()) {
             return null
         }
-        return S3Config(accessKey, secretKey, region, bucket)
+        return S3Config(accessKey, secretKey, region, bucketName = "")
     }
 
     private fun readCurrentProfileConfig(): S3Config? {
@@ -188,6 +192,66 @@ class SettingsManager(context: Context) {
     fun getProfileConfig(name: String): S3Config? = readProfileConfig(name)
 
     fun hasCredentials(): Boolean = readCurrentProfileConfig() != null
+
+    // --- Bucket Management ---
+
+    fun getBuckets(profileName: String): List<BucketEntry> {
+        val json = prefs.getString(profileKey(profileName, "buckets"), null)
+        if (json != null) {
+            return parseBucketsJson(json)
+        }
+        // Migration: if old bucket_name exists, convert it
+        val oldBucket = prefs.getString(profileKey(profileName, "bucket_name"), null)
+        if (!oldBucket.isNullOrBlank()) {
+            val buckets = listOf(BucketEntry(awsName = oldBucket, displayName = oldBucket))
+            saveBuckets(profileName, buckets)
+            prefs.edit().remove(profileKey(profileName, "bucket_name")).apply()
+            return buckets
+        }
+        return emptyList()
+    }
+
+    fun saveBuckets(profileName: String, buckets: List<BucketEntry>) {
+        val jsonArray = JSONArray()
+        for (bucket in buckets) {
+            val obj = JSONObject()
+            obj.put("awsName", bucket.awsName)
+            obj.put("displayName", bucket.displayName)
+            jsonArray.put(obj)
+        }
+        prefs.edit()
+            .putString(profileKey(profileName, "buckets"), jsonArray.toString())
+            .apply()
+    }
+
+    fun addBucket(profileName: String, bucket: BucketEntry) {
+        val buckets = getBuckets(profileName).toMutableList()
+        if (buckets.none { it.awsName == bucket.awsName }) {
+            buckets.add(bucket)
+            saveBuckets(profileName, buckets)
+        }
+    }
+
+    fun removeBucket(profileName: String, awsName: String) {
+        val buckets = getBuckets(profileName).toMutableList()
+        buckets.removeAll { it.awsName == awsName }
+        saveBuckets(profileName, buckets)
+    }
+
+    private fun parseBucketsJson(json: String): List<BucketEntry> {
+        val result = mutableListOf<BucketEntry>()
+        val array = JSONArray(json)
+        for (i in 0 until array.length()) {
+            val obj = array.getJSONObject(i)
+            result.add(
+                BucketEntry(
+                    awsName = obj.getString("awsName"),
+                    displayName = obj.getString("displayName"),
+                ),
+            )
+        }
+        return result
+    }
 
     // --- App Settings (global, not per-profile) ---
 
