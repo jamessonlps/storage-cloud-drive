@@ -34,7 +34,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3FileItem
 import com.clouddrive.s3.S3Repository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -66,6 +68,7 @@ fun ImageGalleryDialog(
             .filter { it in imageFiles.indices }
 
         for (pageIndex in pagesToLoad) {
+            ensureActive()
             val fileItem = imageFiles[pageIndex]
             if (imageCache.containsKey(fileItem.key) || loadingPages[pageIndex] == true) {
                 continue
@@ -77,6 +80,8 @@ fun ImageGalleryDialog(
                     repository.downloadFileAsBytes(fileItem.key)
                 }
                 imageCache[fileItem.key] = bytes
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 errorPages[pageIndex] = e.message ?: "Erro ao carregar imagem"
             } finally {

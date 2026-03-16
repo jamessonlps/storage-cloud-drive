@@ -27,6 +27,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3Repository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -50,6 +51,8 @@ fun ImagePreviewDialog(
             imageBytes = withContext(Dispatchers.IO) {
                 repository.downloadFileAsBytes(imageKey)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.message ?: "Erro ao carregar imagem"
         } finally {

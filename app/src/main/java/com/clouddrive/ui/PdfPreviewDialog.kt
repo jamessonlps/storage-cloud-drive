@@ -26,6 +26,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,7 +65,7 @@ fun PdfPreviewDialog(
     var pageCount by remember { mutableIntStateOf(0) }
     var tempFile by remember { mutableStateOf<File?>(null) }
 
-    val bitmapCache = remember { mutableMapOf<Int, Bitmap>() }
+    val bitmapCache = remember { mutableStateMapOf<Int, Bitmap>() }
 
     val repository = remember(config) { S3Repository(config) }
 
@@ -156,28 +157,29 @@ fun PdfPreviewDialog(
                             pagerState.currentPage + 1,
                         ).filter { it in 0 until pageCount }
 
-                        withContext(Dispatchers.IO) {
-                            for (pageIndex in pagesToRender) {
-                                if (!bitmapCache.containsKey(pageIndex)) {
+                        for (pageIndex in pagesToRender) {
+                            if (!bitmapCache.containsKey(pageIndex)) {
+                                val bitmap = withContext(Dispatchers.IO) {
                                     val page = currentRenderer.openPage(pageIndex)
                                     val aspectRatio = page.width.toFloat() / page.height.toFloat()
                                     val bitmapWidth = screenWidthPx
                                     val bitmapHeight = (bitmapWidth / aspectRatio).toInt()
-                                    val bitmap = Bitmap.createBitmap(
+                                    val bmp = Bitmap.createBitmap(
                                         bitmapWidth,
                                         bitmapHeight,
                                         Bitmap.Config.ARGB_8888,
                                     )
-                                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                                    bmp.eraseColor(android.graphics.Color.WHITE)
                                     page.render(
-                                        bitmap,
+                                        bmp,
                                         null,
                                         null,
                                         PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY,
                                     )
                                     page.close()
-                                    bitmapCache[pageIndex] = bitmap
+                                    bmp
                                 }
+                                bitmapCache[pageIndex] = bitmap
                             }
                         }
                     }

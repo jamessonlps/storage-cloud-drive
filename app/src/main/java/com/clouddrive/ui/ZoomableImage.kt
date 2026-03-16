@@ -1,5 +1,6 @@
 package com.clouddrive.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -20,6 +21,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ZoomableImage(
     imageBytes: ByteArray,
@@ -57,7 +59,10 @@ fun ZoomableImage(
                 translationX = offset.x,
                 translationY = offset.y,
             )
-            .transformable(state = transformableState)
+            .transformable(
+                state = transformableState,
+                canPan = { scale > 1f },
+            )
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
