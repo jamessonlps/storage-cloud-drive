@@ -3,7 +3,7 @@ package com.clouddrive.transfer
 import java.util.UUID
 
 enum class TransferState {
-    QUEUED, UPLOADING, DOWNLOADING, COMPLETED, FAILED, CANCELLED, RETRYING
+    QUEUED, UPLOADING, DOWNLOADING, COMPLETED, FAILED, CANCELLED, RETRYING, PAUSED
 }
 
 enum class TransferType {
@@ -12,6 +12,7 @@ enum class TransferType {
 
 data class TransferItem(
     val id: String = UUID.randomUUID().toString(),
+    val batchId: String = UUID.randomUUID().toString(),
     val fileName: String,
     val s3Key: String,
     val type: TransferType,
@@ -28,6 +29,7 @@ data class TransferItem(
     val sourceUri: String? = null,
     val contentType: String? = null,
     val prefix: String = "",
+    val bucketName: String = "",
 ) {
     val progress: Float
         get() = if (totalBytes > 0) (transferredBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f

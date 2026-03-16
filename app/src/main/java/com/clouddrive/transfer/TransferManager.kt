@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
-import android.provider.OpenableColumns
 import com.clouddrive.crypto.EncryptionManager
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3Repository
@@ -21,9 +20,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import java.io.File
@@ -46,6 +42,8 @@ object TransferManager {
         }
     }
 
+    // --- Single item enqueue (backwards compatible) ---
+
     fun enqueue(
         item: TransferItem,
         config: S3Config,
@@ -54,39 +52,109 @@ object TransferManager {
         profileName: String? = null,
     ) {
         _transfers.value = _transfers.value + item
-
-        // Persist URI permission for retry support
-        if (item.sourceUri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    Uri.parse(item.sourceUri),
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            } catch (_: Exception) {
-                // Some URIs don't support persistable permissions
-            }
-        }
-
-        // Ensure foreground service is running
+        persistUri(item, context)
         TransferService.ensureRunning(context)
+        launchItem(item, config, context, settingsManager, profileName)
+    }
 
-        val job = scope.launch {
-            semaphore.acquire()
-            try {
-                when (item.type) {
-                    TransferType.UPLOAD -> executeUpload(item, config, context, settingsManager, profileName)
-                    TransferType.DOWNLOAD -> executeDownload(item, config, context, settingsManager, profileName)
-                }
-            } catch (e: CancellationException) {
-                updateState(item.id, TransferState.CANCELLED)
-            } finally {
-                semaphore.release()
+    // --- Batch operations ---
+
+    fun enqueueBatch(
+        items: List<TransferItem>,
+        config: S3Config,
+        context: Context,
+        settingsManager: SettingsManager? = null,
+        profileName: String? = null,
+    ) {
+        _transfers.value = _transfers.value + items
+        items.forEach { persistUri(it, context) }
+        TransferService.ensureRunning(context)
+        items.forEach { launchItem(it, config, context, settingsManager, profileName) }
+    }
+
+    fun pauseBatch(batchId: String) {
+        // Update state FIRST to prevent race with CancellationException handler
+        val activeIds = _transfers.value
+            .filter { it.batchId == batchId && it.isActive }
+            .map { it.id }
+            .toSet()
+        _transfers.value = _transfers.value.map {
+            if (it.id in activeIds) {
+                it.copy(state = TransferState.PAUSED)
+            } else it
+        }
+        // Then cancel jobs - CancellationException handler will see PAUSED state
+        for (id in activeIds) {
+            jobs[id]?.cancel()
+            jobs.remove(id)
+        }
+    }
+
+    fun resumeBatch(
+        batchId: String,
+        config: S3Config,
+        context: Context,
+        settingsManager: SettingsManager? = null,
+        profileName: String? = null,
+    ) {
+        _transfers.value = _transfers.value.map {
+            if (it.batchId == batchId && it.state == TransferState.PAUSED) {
+                it.copy(state = TransferState.QUEUED, transferredBytes = 0, completedParts = 0)
+            } else it
+        }
+        TransferService.ensureRunning(context)
+        val resumedItems = _transfers.value.filter { it.batchId == batchId && it.state == TransferState.QUEUED }
+        resumedItems.forEach { launchItem(it, config, context, settingsManager, profileName) }
+    }
+
+    fun cancelBatch(batchId: String) {
+        val batchItems = _transfers.value.filter { it.batchId == batchId }
+        for (item in batchItems) {
+            if (item.isActive || item.state == TransferState.PAUSED) {
+                jobs[item.id]?.cancel()
                 jobs.remove(item.id)
-                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE))
             }
         }
-        jobs[item.id] = job
+        _transfers.value = _transfers.value.map {
+            if (it.batchId == batchId && (it.isActive || it.state == TransferState.PAUSED)) {
+                it.copy(state = TransferState.CANCELLED)
+            } else it
+        }
     }
+
+    fun retryFailedInBatch(
+        batchId: String,
+        config: S3Config,
+        context: Context,
+        settingsManager: SettingsManager? = null,
+        profileName: String? = null,
+    ) {
+        _transfers.value = _transfers.value.map {
+            if (it.batchId == batchId && it.state == TransferState.FAILED) {
+                it.copy(
+                    state = TransferState.QUEUED,
+                    transferredBytes = 0,
+                    completedParts = 0,
+                    errorMessage = null,
+                    retryCount = 0,
+                )
+            } else it
+        }
+        TransferService.ensureRunning(context)
+        val retryItems = _transfers.value.filter { it.batchId == batchId && it.state == TransferState.QUEUED }
+        retryItems.forEach { launchItem(it, config, context, settingsManager, profileName) }
+    }
+
+    fun removeBatch(batchId: String) {
+        val batchItems = _transfers.value.filter { it.batchId == batchId }
+        for (item in batchItems) {
+            jobs[item.id]?.cancel()
+            jobs.remove(item.id)
+        }
+        _transfers.value = _transfers.value.filter { it.batchId != batchId }
+    }
+
+    // --- Existing single-item operations ---
 
     fun cancel(id: String) {
         jobs[id]?.cancel()
@@ -104,25 +172,8 @@ object TransferManager {
             retryCount = 0,
         )
         _transfers.value = _transfers.value.map { if (it.id == id) retryItem else it }
-
         TransferService.ensureRunning(context)
-
-        val job = scope.launch {
-            semaphore.acquire()
-            try {
-                when (retryItem.type) {
-                    TransferType.UPLOAD -> executeUpload(retryItem, config, context)
-                    TransferType.DOWNLOAD -> executeDownload(retryItem, config, context)
-                }
-            } catch (e: CancellationException) {
-                updateState(id, TransferState.CANCELLED)
-            } finally {
-                semaphore.release()
-                jobs.remove(id)
-                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE))
-            }
-        }
-        jobs[id] = job
+        launchItem(retryItem, config, context)
     }
 
     fun remove(id: String) {
@@ -135,6 +186,57 @@ object TransferManager {
         _transfers.value = _transfers.value.filter {
             it.state != TransferState.COMPLETED && it.state != TransferState.CANCELLED
         }
+    }
+
+    // --- Helpers ---
+
+    private fun persistUri(item: TransferItem, context: Context) {
+        if (item.sourceUri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    Uri.parse(item.sourceUri),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+                // Some URIs don't support persistable permissions
+            }
+        }
+    }
+
+    private fun launchItem(
+        item: TransferItem,
+        config: S3Config,
+        context: Context,
+        settingsManager: SettingsManager? = null,
+        profileName: String? = null,
+    ) {
+        val job = scope.launch {
+            semaphore.acquire()
+            try {
+                // Check if item was paused/cancelled while waiting for semaphore
+                val current = _transfers.value.find { it.id == item.id }
+                if (current == null || current.state == TransferState.PAUSED || current.state == TransferState.CANCELLED) {
+                    return@launch
+                }
+                val effectiveConfig = if (item.bucketName.isNotEmpty()) {
+                    config.copy(bucketName = item.bucketName)
+                } else config
+                when (item.type) {
+                    TransferType.UPLOAD -> executeUpload(item, effectiveConfig, context, settingsManager, profileName)
+                    TransferType.DOWNLOAD -> executeDownload(item, effectiveConfig, context, settingsManager, profileName)
+                }
+            } catch (e: CancellationException) {
+                val current = _transfers.value.find { it.id == item.id }
+                if (current != null && current.state != TransferState.PAUSED) {
+                    updateState(item.id, TransferState.CANCELLED)
+                }
+            } finally {
+                semaphore.release()
+                jobs.remove(item.id)
+                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE))
+            }
+        }
+        jobs[item.id] = job
     }
 
     private fun updateState(id: String, state: TransferState, error: String? = null) {
@@ -174,7 +276,6 @@ object TransferManager {
         val repository = S3Repository(config)
         var currentRetry = 0
 
-        // Check encryption
         val encryptionEnabled = settingsManager != null && profileName != null &&
             EncryptionManager.isEnabled(settingsManager, profileName)
 
@@ -295,7 +396,6 @@ object TransferManager {
                 )
                 repository.downloadFile(item.s3Key, dest)
 
-                // Check if file was encrypted and decrypt
                 if (settingsManager != null && profileName != null) {
                     try {
                         val metadata = repository.headObject(item.s3Key)

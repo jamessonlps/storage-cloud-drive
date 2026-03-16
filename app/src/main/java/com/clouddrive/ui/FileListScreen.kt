@@ -180,16 +180,21 @@ fun FileListScreen(
     LaunchedEffect(downloadSelectedTrigger) {
         if (downloadSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
             val filesToDownload = files.filter { it.key in selectedKeys && !it.isFolder }
-            filesToDownload.forEach { file ->
-                val item = TransferItem(
-                    fileName = file.fileName,
-                    s3Key = file.key,
-                    type = TransferType.DOWNLOAD,
-                    totalBytes = file.size,
-                )
-                TransferManager.enqueue(item, config, context, settingsManager, profileName)
+            if (filesToDownload.isNotEmpty()) {
+                val batchId = java.util.UUID.randomUUID().toString()
+                val items = filesToDownload.map { file ->
+                    TransferItem(
+                        batchId = batchId,
+                        fileName = file.fileName,
+                        s3Key = file.key,
+                        type = TransferType.DOWNLOAD,
+                        totalBytes = file.size,
+                        bucketName = config.bucketName,
+                    )
+                }
+                TransferManager.enqueueBatch(items, config, context, settingsManager, profileName)
+                Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()
             }
-            Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()
             clearSelection()
         }
     }
@@ -287,11 +292,13 @@ fun FileListScreen(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        uris.forEach { uri ->
+        val batchId = java.util.UUID.randomUUID().toString()
+        val items = uris.map { uri ->
             val fileName = getFileName(context, uri) ?: "arquivo_${System.currentTimeMillis()}"
             val fileSize = getFileSize(context, uri)
             val contentType = context.contentResolver.getType(uri)
-            val item = TransferItem(
+            TransferItem(
+                batchId = batchId,
                 fileName = fileName,
                 s3Key = currentPrefix + fileName,
                 type = TransferType.UPLOAD,
@@ -299,9 +306,10 @@ fun FileListScreen(
                 sourceUri = uri.toString(),
                 contentType = contentType,
                 prefix = currentPrefix,
+                bucketName = config.bucketName,
             )
-            TransferManager.enqueue(item, config, context, settingsManager, profileName)
         }
+        TransferManager.enqueueBatch(items, config, context, settingsManager, profileName)
         Toast.makeText(
             context,
             "Upload iniciado: ${uris.size} arquivo(s)",
@@ -442,6 +450,7 @@ fun FileListScreen(
                                         s3Key = file.key,
                                         type = TransferType.DOWNLOAD,
                                         totalBytes = file.size,
+                                        bucketName = config.bucketName,
                                     )
                                     TransferManager.enqueue(item, config, context, settingsManager, profileName)
                                     Toast.makeText(

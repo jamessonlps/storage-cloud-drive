@@ -27,7 +27,9 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.SwapVert
@@ -44,21 +46,53 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.clouddrive.s3.S3Config
+import com.clouddrive.s3.SettingsManager
 import com.clouddrive.transfer.TransferItem
 import com.clouddrive.transfer.TransferManager
 import com.clouddrive.transfer.TransferState
 import com.clouddrive.transfer.TransferType
 
+private enum class BatchState {
+    ACTIVE, PAUSED, COMPLETED, HAS_FAILURES, CANCELLED
+}
+
+private data class BatchGroup(
+    val batchId: String,
+    val items: List<TransferItem>,
+) {
+    val total: Int get() = items.size
+    val completedCount: Int get() = items.count { it.state == TransferState.COMPLETED }
+    val failedCount: Int get() = items.count { it.state == TransferState.FAILED }
+    val type: TransferType get() = items.first().type
+    val isSingleFile: Boolean get() = total == 1
+
+    val state: BatchState
+        get() = when {
+            items.any { it.isActive } -> BatchState.ACTIVE
+            items.all { it.state in setOf(TransferState.PAUSED, TransferState.COMPLETED, TransferState.FAILED) }
+                && items.any { it.state == TransferState.PAUSED } -> BatchState.PAUSED
+            items.all { it.state == TransferState.COMPLETED } -> BatchState.COMPLETED
+            items.all { it.state == TransferState.CANCELLED } -> BatchState.CANCELLED
+            failedCount > 0 -> BatchState.HAS_FAILURES
+            else -> BatchState.CANCELLED
+        }
+
+    val currentFile: TransferItem?
+        get() = items.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING) }
+}
+
 @Composable
 fun TransferQueueScreen(
     config: S3Config?,
+    settingsManager: SettingsManager? = null,
+    profileName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val transfers by TransferManager.transfers.collectAsState()
@@ -87,11 +121,13 @@ fun TransferQueueScreen(
         return
     }
 
-    val active = transfers.filter {
-        it.state in setOf(TransferState.QUEUED, TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.RETRYING)
-    }
-    val completed = transfers.filter { it.state == TransferState.COMPLETED }
-    val failed = transfers.filter { it.state in setOf(TransferState.FAILED, TransferState.CANCELLED) }
+    val batches = transfers.groupBy { it.batchId }
+        .map { (batchId, items) -> BatchGroup(batchId, items) }
+        .sortedByDescending { it.items.first().createdAt }
+
+    val activeBatches = batches.filter { it.state == BatchState.ACTIVE || it.state == BatchState.PAUSED }
+    val completedBatches = batches.filter { it.state == BatchState.COMPLETED }
+    val failedBatches = batches.filter { it.state == BatchState.HAS_FAILURES || it.state == BatchState.CANCELLED }
 
     LazyColumn(
         modifier = modifier
@@ -99,46 +135,48 @@ fun TransferQueueScreen(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (active.isNotEmpty()) {
-            item {
-                SectionHeader("Em andamento (${active.size})")
-            }
-            items(active, key = { it.id }) { item ->
-                TransferItemCard(
-                    item = item,
-                    onCancel = { TransferManager.cancel(item.id) },
-                    onRetry = null,
+        if (activeBatches.isNotEmpty()) {
+            item { SectionHeader("Em andamento (${activeBatches.size})") }
+            items(activeBatches, key = { it.batchId }) { batch ->
+                BatchCard(
+                    batch = batch,
+                    onPause = { TransferManager.pauseBatch(batch.batchId) },
+                    onResume = if (config != null) {
+                        { TransferManager.resumeBatch(batch.batchId, config, context, settingsManager, profileName) }
+                    } else null,
+                    onCancel = { TransferManager.cancelBatch(batch.batchId) },
+                    onRetryFailed = null,
                     onRemove = null,
                 )
             }
         }
 
-        if (completed.isNotEmpty()) {
-            item {
-                SectionHeader("Concluídos (${completed.size})")
-            }
-            items(completed, key = { it.id }) { item ->
-                TransferItemCard(
-                    item = item,
+        if (completedBatches.isNotEmpty()) {
+            item { SectionHeader("Concluídos (${completedBatches.size})") }
+            items(completedBatches, key = { it.batchId }) { batch ->
+                BatchCard(
+                    batch = batch,
+                    onPause = null,
+                    onResume = null,
                     onCancel = null,
-                    onRetry = null,
-                    onRemove = { TransferManager.remove(item.id) },
+                    onRetryFailed = null,
+                    onRemove = { TransferManager.removeBatch(batch.batchId) },
                 )
             }
         }
 
-        if (failed.isNotEmpty()) {
-            item {
-                SectionHeader("Falhas (${failed.size})")
-            }
-            items(failed, key = { it.id }) { item ->
-                TransferItemCard(
-                    item = item,
+        if (failedBatches.isNotEmpty()) {
+            item { SectionHeader("Falhas (${failedBatches.size})") }
+            items(failedBatches, key = { it.batchId }) { batch ->
+                BatchCard(
+                    batch = batch,
+                    onPause = null,
+                    onResume = null,
                     onCancel = null,
-                    onRetry = if (item.state == TransferState.FAILED && config != null) {
-                        { TransferManager.retry(item.id, config, context) }
+                    onRetryFailed = if (batch.state == BatchState.HAS_FAILURES && config != null) {
+                        { TransferManager.retryFailedInBatch(batch.batchId, config, context, settingsManager, profileName) }
                     } else null,
-                    onRemove = { TransferManager.remove(item.id) },
+                    onRemove = { TransferManager.removeBatch(batch.batchId) },
                 )
             }
         }
@@ -158,57 +196,78 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun TransferItemCard(
-    item: TransferItem,
+private fun BatchCard(
+    batch: BatchGroup,
+    onPause: (() -> Unit)?,
+    onResume: (() -> Unit)?,
     onCancel: (() -> Unit)?,
-    onRetry: (() -> Unit)?,
+    onRetryFailed: (() -> Unit)?,
     onRemove: (() -> Unit)?,
 ) {
-    val statusColor = when (item.state) {
-        TransferState.COMPLETED -> Color(0xFF43A047)
-        TransferState.FAILED -> MaterialTheme.colorScheme.error
-        TransferState.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
-        TransferState.RETRYING -> Color(0xFFFFA000)
-        else -> MaterialTheme.colorScheme.primary
+    val statusColor = when (batch.state) {
+        BatchState.COMPLETED -> Color(0xFF43A047)
+        BatchState.HAS_FAILURES -> MaterialTheme.colorScheme.error
+        BatchState.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
+        BatchState.PAUSED -> Color(0xFFFFA000)
+        BatchState.ACTIVE -> MaterialTheme.colorScheme.primary
     }
+
+    val icon = getBatchIcon(batch)
+    val iconColor = getBatchIconColor(batch)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // File type icon
                 Icon(
-                    imageVector = getTransferIcon(item),
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = getTransferIconColor(item),
+                    tint = iconColor,
                     modifier = Modifier.size(32.dp),
                 )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                // File name and status
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.fileName,
+                        text = getBatchTitle(batch),
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = getStatusText(item),
+                        text = getBatchSubtitle(batch),
                         style = MaterialTheme.typography.bodySmall,
                         color = statusColor,
                     )
                 }
 
-                // Action buttons
+                // Actions
+                if (batch.state == BatchState.ACTIVE && onPause != null) {
+                    IconButton(onClick = onPause, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Filled.Pause,
+                            contentDescription = "Pausar",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                if (batch.state == BatchState.PAUSED && onResume != null) {
+                    IconButton(onClick = onResume, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = "Retomar",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
                 if (onCancel != null) {
                     IconButton(onClick = onCancel, modifier = Modifier.size(36.dp)) {
                         Icon(
@@ -219,14 +278,11 @@ private fun TransferItemCard(
                         )
                     }
                 }
-                if (onRetry != null) {
-                    IconButton(
-                        onClick = onRetry,
-                        modifier = Modifier.size(36.dp),
-                    ) {
+                if (onRetryFailed != null) {
+                    IconButton(onClick = onRetryFailed, modifier = Modifier.size(36.dp)) {
                         Icon(
                             Icons.Filled.Refresh,
-                            contentDescription = "Tentar novamente",
+                            contentDescription = "Retentar falhas",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp),
                         )
@@ -244,18 +300,29 @@ private fun TransferItemCard(
                 }
             }
 
-            // Progress bar for active transfers
-            if (item.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.RETRYING)) {
+            // Progress bar
+            if (batch.state == BatchState.ACTIVE || batch.state == BatchState.PAUSED) {
                 Spacer(modifier = Modifier.height(8.dp))
-                if (item.totalBytes > 0) {
-                    LinearProgressIndicator(
-                        progress = item.progress,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = statusColor,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
+                if (batch.isSingleFile) {
+                    val item = batch.items.first()
+                    if (item.totalBytes > 0 && item.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING)) {
+                        LinearProgressIndicator(
+                            progress = item.progress,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = statusColor,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = statusColor,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                    }
                 } else {
+                    val progress = batch.completedCount.toFloat() / batch.total
                     LinearProgressIndicator(
+                        progress = progress,
                         modifier = Modifier.fillMaxWidth(),
                         color = statusColor,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -263,55 +330,102 @@ private fun TransferItemCard(
                 }
             }
 
-            // Queued state - indeterminate progress
-            if (item.state == TransferState.QUEUED) {
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-            }
-
-            // Error message
-            if (item.state == TransferState.FAILED && item.errorMessage != null) {
+            // Current file being transferred (for multi-file batches)
+            if (!batch.isSingleFile && batch.currentFile != null) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = item.errorMessage,
+                    text = batch.currentFile!!.fileName,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-    }
-}
 
-private fun getStatusText(item: TransferItem): String {
-    val typeLabel = if (item.type == TransferType.UPLOAD) "Upload" else "Download"
-    return when (item.state) {
-        TransferState.QUEUED -> "$typeLabel na fila..."
-        TransferState.UPLOADING, TransferState.DOWNLOADING -> {
-            val percent = (item.progress * 100).toInt()
-            if (item.isMultipart) {
-                "$typeLabel: $percent% (parte ${item.completedParts}/${item.totalParts})"
-            } else {
-                "$typeLabel: $percent%"
+            // Error info for failed batches
+            if (batch.state == BatchState.HAS_FAILURES && batch.failedCount > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                val firstError = batch.items.find { it.state == TransferState.FAILED }?.errorMessage
+                if (firstError != null) {
+                    Text(
+                        text = firstError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
-        TransferState.COMPLETED -> "$typeLabel concluído"
-        TransferState.FAILED -> "$typeLabel falhou"
-        TransferState.CANCELLED -> "$typeLabel cancelado"
-        TransferState.RETRYING -> "Retentando (${item.retryCount}/${item.maxRetries})..."
     }
 }
 
-private fun getTransferIcon(item: TransferItem): ImageVector {
-    if (item.state == TransferState.COMPLETED) return Icons.Filled.CheckCircle
-    if (item.state == TransferState.FAILED) return Icons.Filled.Error
+private fun getBatchTitle(batch: BatchGroup): String {
+    val typeLabel = if (batch.type == TransferType.UPLOAD) "Upload" else "Download"
+    return if (batch.isSingleFile) {
+        batch.items.first().fileName
+    } else {
+        "$typeLabel de ${batch.total} arquivos"
+    }
+}
 
-    val ext = item.fileName.substringAfterLast('.', "").lowercase()
+private fun getBatchSubtitle(batch: BatchGroup): String {
+    val typeLabel = if (batch.type == TransferType.UPLOAD) "Upload" else "Download"
+    return when (batch.state) {
+        BatchState.ACTIVE -> {
+            if (batch.isSingleFile) {
+                val item = batch.items.first()
+                when (item.state) {
+                    TransferState.QUEUED -> "$typeLabel na fila..."
+                    TransferState.UPLOADING, TransferState.DOWNLOADING -> {
+                        val percent = (item.progress * 100).toInt()
+                        "$typeLabel: $percent%"
+                    }
+                    TransferState.RETRYING -> "Retentando (${item.retryCount}/${item.maxRetries})..."
+                    else -> "$typeLabel em andamento"
+                }
+            } else {
+                "${batch.completedCount} de ${batch.total} concluídos"
+            }
+        }
+        BatchState.PAUSED -> {
+            if (batch.isSingleFile) "Pausado"
+            else "Pausado - ${batch.completedCount} de ${batch.total} concluídos"
+        }
+        BatchState.COMPLETED -> {
+            if (batch.isSingleFile) "$typeLabel concluído"
+            else "${batch.total} de ${batch.total} concluídos"
+        }
+        BatchState.HAS_FAILURES -> {
+            if (batch.isSingleFile) "$typeLabel falhou"
+            else "${batch.completedCount} de ${batch.total} concluídos, ${batch.failedCount} falharam"
+        }
+        BatchState.CANCELLED -> "$typeLabel cancelado"
+    }
+}
+
+private fun getBatchIcon(batch: BatchGroup): ImageVector {
+    if (batch.state == BatchState.COMPLETED) return Icons.Filled.CheckCircle
+    if (batch.state == BatchState.HAS_FAILURES) return Icons.Filled.Error
+
+    if (batch.isSingleFile) {
+        return getFileExtIcon(batch.items.first().fileName, batch.type)
+    }
+    return if (batch.type == TransferType.UPLOAD) Icons.Filled.CloudUpload else Icons.Filled.CloudDownload
+}
+
+private fun getBatchIconColor(batch: BatchGroup): Color {
+    if (batch.state == BatchState.COMPLETED) return Color(0xFF43A047)
+    if (batch.state == BatchState.HAS_FAILURES) return Color(0xFFE53935)
+
+    if (batch.isSingleFile) {
+        return getFileExtColor(batch.items.first().fileName)
+    }
+    return Color(0xFF1E88E5)
+}
+
+private fun getFileExtIcon(fileName: String, type: TransferType): ImageVector {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
     return when (ext) {
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg",
         "ico", "tiff", "tif", "heic", "heif", "raw" -> Icons.Filled.Image
@@ -332,17 +446,13 @@ private fun getTransferIcon(item: TransferItem): ImageVector {
         "xz", "tgz", "zst" -> Icons.Filled.FolderZip
         "apk" -> Icons.Filled.Android
         else -> {
-            if (item.type == TransferType.UPLOAD) Icons.Filled.CloudUpload
-            else Icons.Filled.CloudDownload
+            if (type == TransferType.UPLOAD) Icons.Filled.CloudUpload else Icons.Filled.CloudDownload
         }
     }
 }
 
-private fun getTransferIconColor(item: TransferItem): Color {
-    if (item.state == TransferState.COMPLETED) return Color(0xFF43A047)
-    if (item.state == TransferState.FAILED) return Color(0xFFE53935)
-
-    val ext = item.fileName.substringAfterLast('.', "").lowercase()
+private fun getFileExtColor(fileName: String): Color {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
     return when (ext) {
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg",
         "ico", "tiff", "tif", "heic", "heif", "raw" -> Color(0xFF7E57C2)

@@ -63,11 +63,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import com.clouddrive.s3.BucketEntry
 import com.clouddrive.s3.SettingsManager
 import com.clouddrive.transfer.TransferItem
 import com.clouddrive.transfer.TransferManager
 import com.clouddrive.transfer.TransferState
 import com.clouddrive.transfer.TransferType
+import com.clouddrive.service.TransferService
+import com.clouddrive.ui.BucketListScreen
 import com.clouddrive.ui.FileListScreen
 import com.clouddrive.ui.SettingsScreen
 import com.clouddrive.ui.TransferQueueScreen
@@ -77,10 +80,23 @@ enum class Screen { Home, Settings, Transfers }
 
 class MainActivity : FragmentActivity() {
 
+    private val pendingTransfersScreen = mutableStateOf(false)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(TransferService.EXTRA_OPEN_TRANSFERS, false)) {
+            pendingTransfersScreen.value = true
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        if (intent.getBooleanExtra(TransferService.EXTRA_OPEN_TRANSFERS, false)) {
+            pendingTransfersScreen.value = true
+        }
 
         val settingsManager = SettingsManager(applicationContext)
 
@@ -116,11 +132,22 @@ class MainActivity : FragmentActivity() {
                 val currentProfileName by settingsManager.currentProfileNameFlow.collectAsState(initial = null)
                 var currentScreen by remember { mutableStateOf(Screen.Home) }
 
+                // Handle notification tap to open Transfers tab
+                LaunchedEffect(pendingTransfersScreen.value) {
+                    if (pendingTransfersScreen.value) {
+                        currentScreen = Screen.Transfers
+                        pendingTransfersScreen.value = false
+                    }
+                }
+
                 // Handle share intent
                 LaunchedEffect(config) {
                     val cfg = config ?: return@LaunchedEffect
                     handleShareIntent(intent, cfg, settingsManager, currentProfileName)
                 }
+
+                // Bucket selection state
+                var selectedBucket by remember { mutableStateOf<BucketEntry?>(null) }
 
                 // Folder navigation state (hoisted)
                 var currentPrefix by remember { mutableStateOf("") }
@@ -149,10 +176,11 @@ class MainActivity : FragmentActivity() {
                 // Shared snackbar
                 val snackbarHostState = remember { SnackbarHostState() }
 
-                // Reset folder state when config/profile changes
+                // Reset folder and bucket state when config/profile changes
                 LaunchedEffect(config) {
                     currentPrefix = ""
                     pathStack.clear()
+                    selectedBucket = null
                 }
 
                 // System back button: exit selection mode first
@@ -160,10 +188,13 @@ class MainActivity : FragmentActivity() {
                     clearSelectionTrigger++
                 }
 
-                // System back button: navigate up folders, then switch to Home, then default
+                // System back button: navigate up folders, then back to bucket list, then default
                 BackHandler(enabled = currentScreen == Screen.Home && !isSelectionMode && pathStack.isNotEmpty()) {
                     pathStack.removeLastOrNull()
                     currentPrefix = pathStack.lastOrNull() ?: ""
+                }
+                BackHandler(enabled = currentScreen == Screen.Home && !isSelectionMode && pathStack.isEmpty() && selectedBucket != null) {
+                    selectedBucket = null
                 }
                 BackHandler(enabled = currentScreen == Screen.Settings || currentScreen == Screen.Transfers) {
                     currentScreen = Screen.Home
@@ -180,28 +211,40 @@ class MainActivity : FragmentActivity() {
                                             style = MaterialTheme.typography.titleMedium,
                                         )
                                     }
-                                    currentScreen == Screen.Home -> Column {
-                                        if (config != null && itemCount > 0) {
+                                    currentScreen == Screen.Home && selectedBucket != null -> Column {
+                                        if (itemCount > 0) {
                                             Text(
                                                 text = if (itemsHasMore) "Exibindo $itemCount itens..." else "Exibindo todos os $itemCount itens",
                                                 style = MaterialTheme.typography.titleMedium,
                                             )
                                         } else {
                                             Text(
-                                                "Cloud Drive S3",
+                                                selectedBucket!!.displayName,
                                                 style = MaterialTheme.typography.titleMedium,
                                             )
                                         }
                                         val subtitle = buildString {
                                             if (!currentProfileName.isNullOrBlank()) append(currentProfileName)
+                                            append(" / ${selectedBucket!!.displayName}")
                                             if (currentPrefix.isNotEmpty()) {
-                                                if (isNotEmpty()) append(" ")
-                                                append("/$currentPrefix")
+                                                append(" / $currentPrefix")
                                             }
                                         }
-                                        if (subtitle.isNotEmpty()) {
+                                        Text(
+                                            text = subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    currentScreen == Screen.Home -> Column {
+                                        Text(
+                                            "Cloud Drive S3",
+                                            style = MaterialTheme.typography.titleMedium,
+                                        )
+                                        if (!currentProfileName.isNullOrBlank()) {
                                             Text(
-                                                text = subtitle,
+                                                text = currentProfileName!!,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
@@ -226,6 +269,10 @@ class MainActivity : FragmentActivity() {
                                         currentPrefix = pathStack.lastOrNull() ?: ""
                                     }) {
                                         Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
+                                    }
+                                } else if (currentScreen == Screen.Home && selectedBucket != null) {
+                                    IconButton(onClick = { selectedBucket = null }) {
+                                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar aos buckets")
                                     }
                                 }
                             },
@@ -270,7 +317,7 @@ class MainActivity : FragmentActivity() {
                                             Icon(Icons.Filled.ClearAll, contentDescription = "Limpar concluídos")
                                         }
                                     }
-                                } else if (currentScreen == Screen.Home && config != null) {
+                                } else if (currentScreen == Screen.Home && config != null && selectedBucket != null) {
                                     IconButton(onClick = { isGridView = !isGridView }) {
                                         Icon(
                                             imageVector = if (isGridView) Icons.Filled.ViewList else Icons.Filled.GridView,
@@ -330,9 +377,22 @@ class MainActivity : FragmentActivity() {
                                     onGoToSettings = { currentScreen = Screen.Settings },
                                     modifier = Modifier.padding(padding),
                                 )
+                            } else if (selectedBucket == null) {
+                                val buckets = remember(config, currentProfileName) {
+                                    currentProfileName?.let { settingsManager.getBuckets(it) } ?: emptyList()
+                                }
+                                BucketListScreen(
+                                    buckets = buckets,
+                                    onBucketSelected = { bucket ->
+                                        selectedBucket = bucket
+                                        currentPrefix = ""
+                                        pathStack.clear()
+                                    },
+                                    modifier = Modifier.padding(padding),
+                                )
                             } else {
                                 FileListScreen(
-                                    config = config!!,
+                                    config = config!!.copy(bucketName = selectedBucket!!.awsName),
                                     isGridView = isGridView,
                                     currentPrefix = currentPrefix,
                                     onNavigateToFolder = { folderKey ->
@@ -365,6 +425,8 @@ class MainActivity : FragmentActivity() {
                         Screen.Transfers -> {
                             TransferQueueScreen(
                                 config = config,
+                                settingsManager = settingsManager,
+                                profileName = currentProfileName,
                                 modifier = Modifier.padding(padding),
                             )
                         }
@@ -407,21 +469,23 @@ class MainActivity : FragmentActivity() {
         if (uris.isEmpty()) return
         shareIntentHandled = true
 
-        uris.forEach { uri ->
+        val batchId = java.util.UUID.randomUUID().toString()
+        val items = uris.map { uri ->
             val fileName = getShareFileName(uri) ?: "arquivo_${System.currentTimeMillis()}"
             val fileSize = getShareFileSize(uri)
             val contentType = contentResolver.getType(uri)
-
-            val item = TransferItem(
+            TransferItem(
+                batchId = batchId,
                 fileName = fileName,
                 s3Key = fileName,
                 type = TransferType.UPLOAD,
                 totalBytes = fileSize,
                 sourceUri = uri.toString(),
                 contentType = contentType,
+                bucketName = config.bucketName,
             )
-            TransferManager.enqueue(item, config, this, settingsManager, profileName)
         }
+        TransferManager.enqueueBatch(items, config, this, settingsManager, profileName)
 
         Toast.makeText(this, "Upload iniciado: ${uris.size} arquivo(s)", Toast.LENGTH_SHORT).show()
     }
