@@ -78,7 +78,7 @@ fun TransferQueueScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "Nenhuma transferencia",
+                    "Nenhuma transferência",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -115,7 +115,7 @@ fun TransferQueueScreen(
 
         if (completed.isNotEmpty()) {
             item {
-                SectionHeader("Concluidos (${completed.size})")
+                SectionHeader("Concluídos (${completed.size})")
             }
             items(completed, key = { it.id }) { item ->
                 TransferItemCard(
@@ -300,7 +300,7 @@ private fun getStatusText(item: TransferItem): String {
                 "$typeLabel: $percent%"
             }
         }
-        TransferState.COMPLETED -> "$typeLabel concluido"
+        TransferState.COMPLETED -> "$typeLabel concluído"
         TransferState.FAILED -> "$typeLabel falhou"
         TransferState.CANCELLED -> "$typeLabel cancelado"
         TransferState.RETRYING -> "Retentando (${item.retryCount}/${item.maxRetries})..."

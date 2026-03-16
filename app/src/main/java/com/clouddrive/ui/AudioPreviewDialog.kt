@@ -118,7 +118,7 @@ fun AudioPreviewDialog(
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
             exoPlayer.prepare()
         } catch (e: Exception) {
-            error = e.message ?: "Erro ao carregar audio"
+            error = e.message ?: "Erro ao carregar áudio"
         } finally {
             isLoading = false
         }
@@ -152,7 +152,7 @@ fun AudioPreviewDialog(
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Carregando audio...",
+                            text = "Carregando áudio...",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -213,7 +213,7 @@ fun AudioPreviewDialog(
                         val iconColor = getAudioIconColor(fileName)
                         Icon(
                             imageVector = Icons.Filled.AudioFile,
-                            contentDescription = "Arquivo de audio",
+                            contentDescription = "Arquivo de áudio",
                             modifier = Modifier.size(80.dp),
                             tint = iconColor,
                         )
@@ -309,7 +309,7 @@ fun AudioPreviewDialog(
                             ) {
                                 Icon(
                                     Icons.Filled.Forward10,
-                                    contentDescription = "Avancar 10 segundos",
+                                    contentDescription = "Avançar 10 segundos",
                                     modifier = Modifier.size(36.dp),
                                 )
                             }

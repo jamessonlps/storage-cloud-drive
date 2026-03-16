@@ -73,7 +73,7 @@ fun VideoPreviewDialog(
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
         } catch (e: Exception) {
-            error = e.message ?: "Erro ao carregar video"
+            error = e.message ?: "Erro ao carregar vídeo"
         } finally {
             isLoading = false
         }

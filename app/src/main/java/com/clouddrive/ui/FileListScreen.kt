@@ -352,7 +352,7 @@ fun FileListScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "Toque no botao + para enviar arquivos",
+                        text = "Toque no botão + para enviar arquivos",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -551,7 +551,7 @@ fun FileListScreen(
                                 }
                                 showDeleteDialog = null
                                 loadFiles()
-                                Toast.makeText(context, "Arquivo excluido", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Arquivo excluído", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
                             }
@@ -575,7 +575,7 @@ fun FileListScreen(
         AlertDialog(
             onDismissRequest = { showBatchDeleteDialog = false },
             title = { Text("Excluir $count ite${if (count == 1) "m" else "ns"}") },
-            text = { Text("Deseja excluir os $count itens selecionados? Esta acao nao pode ser desfeita.") },
+            text = { Text("Deseja excluir os $count itens selecionados? Esta ação não pode ser desfeita.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -588,7 +588,7 @@ fun FileListScreen(
                                 }
                                 clearSelection()
                                 loadFiles()
-                                Toast.makeText(context, "$count ite${if (count == 1) "m excluido" else "ns excluidos"}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "$count ite${if (count == 1) "m excluído" else "ns excluídos"}", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
                             }
@@ -695,7 +695,7 @@ private fun FileItemCard(
             if (isSelectionMode) {
                 Icon(
                     imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (isSelected) "Selecionado" else "Nao selecionado",
+                    contentDescription = if (isSelected) "Selecionado" else "Não selecionado",
                     tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(36.dp),
                 )
@@ -833,7 +833,7 @@ private fun GridFileItemCard(
             if (isSelectionMode) {
                 Icon(
                     imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = if (isSelected) "Selecionado" else "Nao selecionado",
+                    contentDescription = if (isSelected) "Selecionado" else "Não selecionado",
                     tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
                     modifier = Modifier
                         .align(Alignment.TopEnd)

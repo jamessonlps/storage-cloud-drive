@@ -225,14 +225,14 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Configuracao do Bucket",
+            text = "Configuração do Bucket",
             style = MaterialTheme.typography.titleMedium,
         )
 
         OutlinedTextField(
             value = region,
             onValueChange = { region = it },
-            label = { Text("Regiao (ex: us-east-1)") },
+            label = { Text("Região (ex: us-east-1)") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -248,7 +248,7 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Configuracoes de Listagem",
+            text = "Configurações de Listagem",
             style = MaterialTheme.typography.titleMedium,
         )
 
@@ -257,7 +257,7 @@ fun SettingsScreen(
             onExpandedChange = { pageSizeExpanded = !pageSizeExpanded },
         ) {
             OutlinedTextField(
-                value = "$selectedPageSize itens por pagina",
+                value = "$selectedPageSize itens por página",
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Itens por lote") },
@@ -350,7 +350,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Seguranca",
+                text = "Segurança",
                 style = MaterialTheme.typography.titleMedium,
             )
 
@@ -367,7 +367,7 @@ fun SettingsScreen(
                 )
                 Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(
-                        text = "Autenticacao biometrica",
+                        text = "Autenticação biométrica",
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
@@ -395,7 +395,7 @@ fun SettingsScreen(
             if (!canAuthenticate) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Seguranca",
+                    text = "Segurança",
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
@@ -484,7 +484,7 @@ fun SettingsScreen(
                 selectedProfile = ""
                 profiles.clear()
                 scope.launch {
-                    snackbarHostState.showSnackbar("Todas as configuracoes removidas")
+                    snackbarHostState.showSnackbar("Todas as configurações removidas")
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -545,7 +545,7 @@ fun SettingsScreen(
                         selectedProfile = settingsManager.getCurrentProfileName() ?: ""
                         showDeleteProfileDialog = false
                         scope.launch {
-                            snackbarHostState.showSnackbar("Perfil \"$nameToDelete\" excluido")
+                            snackbarHostState.showSnackbar("Perfil \"$nameToDelete\" excluído")
                         }
                     },
                 ) {

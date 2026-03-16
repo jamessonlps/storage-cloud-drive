@@ -194,7 +194,7 @@ fun PdfPreviewDialog(
                             if (bitmap != null) {
                                 Image(
                                     bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Pagina ${pageIndex + 1}",
+                                    contentDescription = "Página ${pageIndex + 1}",
                                     contentScale = ContentScale.FillWidth,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -206,7 +206,7 @@ fun PdfPreviewDialog(
 
                     // Page indicator
                     Text(
-                        text = "Pagina ${pagerState.currentPage + 1} de $pageCount",
+                        text = "Página ${pagerState.currentPage + 1} de $pageCount",
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier
