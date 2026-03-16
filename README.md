@@ -1,7 +1,7 @@
 # Cloud Drive S3
 
 <p align="center">
-  <strong>Aplicativo Android de armazenamento em nuvem pessoal usando Amazon S3</strong>
+  <strong>Personal cloud storage Android app powered by Amazon S3</strong>
 </p>
 
 <p align="center">
@@ -10,81 +10,81 @@
   <img src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-blue?logo=jetpackcompose" alt="Jetpack Compose" />
   <img src="https://img.shields.io/badge/AWS%20SDK-Kotlin%201.0-orange?logo=amazonaws" alt="AWS SDK" />
   <img src="https://img.shields.io/badge/ExoPlayer-Media3%201.2-red" alt="ExoPlayer" />
-  <img src="https://img.shields.io/badge/Criptografia-AES--256--GCM-darkgreen" alt="AES-256-GCM" />
+  <img src="https://img.shields.io/badge/Encryption-AES--256--GCM-darkgreen" alt="AES-256-GCM" />
 </p>
 
 ---
 
-## Sobre o Projeto
+## About
 
-**Cloud Drive S3** transforma um bucket Amazon S3 no seu drive pessoal de nuvem. O app permite enviar fotos, videos, audios e qualquer arquivo do celular para o S3, navegar pelos arquivos armazenados, previsualiza-los diretamente no dispositivo e baixa-los de volta — tudo com criptografia ponta-a-ponta opcional e uma interface moderna em Material Design 3.
-
----
-
-## Funcionalidades
-
-### Gerenciamento de Arquivos
-
-| Funcionalidade | Descricao |
-|---|---|
-| **Upload de arquivos** | Envie qualquer tipo de arquivo para o bucket S3 |
-| **Upload multiplo** | Selecione varios arquivos de uma so vez para enviar |
-| **Upload via compartilhamento** | Compartilhe arquivos diretamente de outros apps (Share Intent) |
-| **Download de arquivos** | Baixe arquivos do S3 para a pasta `Downloads/CloudDriveS3/` |
-| **Criar pastas** | Organize seus arquivos criando pastas diretamente no app |
-| **Excluir arquivos** | Remova arquivos do bucket com confirmacao de seguranca |
-| **Navegacao por pastas** | Navegue pela hierarquia de pastas dentro do bucket |
-
-### Visualizacao de Arquivos
-
-| Funcionalidade | Descricao |
-|---|---|
-| **Preview de imagens** | Visualize imagens com zoom e arrastar (pinch-to-zoom, double-tap) |
-| **Galeria de imagens** | Deslize entre imagens da mesma pasta (swipe horizontal) |
-| **Preview de videos** | Reproduza videos com controles nativos (ExoPlayer/Media3) |
-| **Preview de audio** | Reproduza audio com interface customizada (play/pause, seek, duracao) |
-| **Preview de PDF** | Visualize PDFs com navegacao por paginas (PdfRenderer nativo) |
-| **Icones por tipo** | Icones distintos para imagens, videos, audios, documentos e outros |
-| **Miniaturas** | Thumbnails de imagens carregados diretamente do S3 (via Coil) |
-| **Modo grade/lista** | Alterne entre visualizacao em grade ou lista |
-
-### Transferencias
-
-| Funcionalidade | Descricao |
-|---|---|
-| **Fila de transferencias** | Gerencie uploads e downloads em fila com estado individual |
-| **Progresso em tempo real** | Acompanhe o progresso de cada transferencia em porcentagem |
-| **Transferencias em paralelo** | Ate 3 transferencias simultaneas (semaforo configuravel) |
-| **Retry automatico** | Reenvio automatico com backoff exponencial em caso de falha |
-| **Upload multipart** | Arquivos grandes enviados em partes para maior confiabilidade |
-| **Transferencias em segundo plano** | Uploads e downloads continuam mesmo ao sair do app (Foreground Service) |
-| **Notificacoes de progresso** | Acompanhe o status das transferencias pela barra de notificacoes |
-
-### Seguranca
-
-| Funcionalidade | Descricao |
-|---|---|
-| **Criptografia AES-256-GCM** | Arquivos criptografados antes do upload, descriptografados apos o download |
-| **Chave por perfil** | Cada perfil AWS tem sua propria chave de criptografia |
-| **Autenticacao biometrica** | Proteja o acesso ao app com impressao digital ou Face ID |
-| **Armazenamento seguro** | Credenciais salvas com EncryptedSharedPreferences |
-| **HTTPS obrigatorio** | Comunicacao sempre criptografada em transito |
-| **Multiplos perfis** | Gerencie diferentes configuracoes AWS com troca rapida |
-
-### Interface
-
-| Funcionalidade | Descricao |
-|---|---|
-| **Tema claro/escuro/sistema** | Troque o tema manualmente ou sincronize com o sistema |
-| **Dynamic Colors** | Paleta de cores adaptada automaticamente ao papel de parede (Android 12+) |
-| **Badge de transferencias** | Contador de transferencias ativas na barra de navegacao |
-| **Material Design 3** | Interface moderna com componentes e gestos do Material 3 |
+**Cloud Drive S3** turns an Amazon S3 bucket into your personal cloud drive. The app lets you upload photos, videos, audio and any file from your phone to S3, browse stored files, preview them directly on the device, and download them back — all with optional end-to-end encryption and a modern Material Design 3 interface.
 
 ---
 
-## Arquitetura
+## Features
 
-O projeto segue uma arquitetura em camadas com separacao clara de responsabilidades:
+### File Management
+
+| Feature | Description |
+|---|---|
+| **File upload** | Send any file type to your S3 bucket |
+| **Multi-file upload** | Select multiple files at once to upload |
+| **Share Intent upload** | Share files directly from other apps into Cloud Drive S3 |
+| **File download** | Save files from S3 to `Downloads/CloudDriveS3/` |
+| **Create folders** | Organize your files by creating folders inside the bucket |
+| **Delete files** | Remove files from the bucket with a confirmation dialog |
+| **Folder navigation** | Browse the full folder hierarchy inside your bucket |
+
+### File Preview
+
+| Feature | Description |
+|---|---|
+| **Image preview** | View images with zoom and pan (pinch-to-zoom, double-tap) |
+| **Image gallery** | Swipe horizontally between images in the same folder |
+| **Video preview** | Play videos with native controls (ExoPlayer / Media3) |
+| **Audio preview** | Play audio with a custom UI (play/pause, seek bar, duration, ±10s skip) |
+| **PDF preview** | View PDFs with page-by-page navigation (native PdfRenderer) |
+| **File type icons** | Distinct icons for images, videos, audio, documents, and other types |
+| **Thumbnails** | Image thumbnails loaded directly from S3 (via Coil) |
+| **Grid / List mode** | Toggle between grid and list view |
+
+### Transfers
+
+| Feature | Description |
+|---|---|
+| **Transfer queue** | Manage uploads and downloads in a queue with individual status |
+| **Real-time progress** | Track the progress of each transfer as a percentage |
+| **Parallel transfers** | Up to 3 simultaneous transfers (configurable semaphore) |
+| **Automatic retry** | Exponential backoff retry on failure |
+| **Multipart upload** | Large files are split into parts for improved reliability |
+| **Background transfers** | Uploads and downloads continue even when the app is in the background (Foreground Service) |
+| **Progress notifications** | Monitor transfer status from the system notification bar |
+
+### Security
+
+| Feature | Description |
+|---|---|
+| **AES-256-GCM encryption** | Files are encrypted before upload and decrypted after download |
+| **Per-profile key** | Each AWS profile has its own encryption key |
+| **Biometric authentication** | Protect app access with fingerprint or Face ID |
+| **Secure storage** | Credentials stored with EncryptedSharedPreferences |
+| **HTTPS only** | All communication is encrypted in transit |
+| **Multiple profiles** | Manage different AWS configurations with quick switching |
+
+### UI
+
+| Feature | Description |
+|---|---|
+| **Light / Dark / System theme** | Switch themes manually or follow the system setting |
+| **Dynamic Colors** | Color palette automatically adapts to the wallpaper (Android 12+) |
+| **Transfer badge** | Active transfer count badge on the bottom navigation bar |
+| **Material Design 3** | Modern interface with Material 3 components and gestures |
+
+---
+
+## Architecture
+
+The project follows a layered architecture with clear separation of concerns:
 
 ```
 com.clouddrive/
@@ -92,47 +92,47 @@ com.clouddrive/
 |-- CloudDriveApp.kt              # Application class
 |-- MainActivity.kt               # Entry point, Compose host, Share Intent handler
 |
-|-- crypto/                        # Camada de seguranca
-|   |-- EncryptionManager.kt      # AES-256-GCM: gera chave, encripta, decripta
+|-- crypto/                        # Security layer
+|   |-- EncryptionManager.kt      # AES-256-GCM: key generation, encrypt, decrypt
 |
-|-- s3/                            # Camada de dados (AWS S3)
-|   |-- S3Config.kt               # Data class: accessKeyId, secretKey, region, bucket
-|   |-- S3ClientProvider.kt       # Singleton com cache do S3Client
+|-- s3/                            # Data layer (AWS S3)
+|   |-- S3Config.kt               # Config data class: accessKeyId, secretKey, region, bucket
+|   |-- S3ClientProvider.kt       # Cached S3Client singleton
 |   |-- S3Repository.kt           # CRUD: list, upload, download, delete, headObject
-|   |-- SettingsManager.kt        # DataStore: credenciais, perfis, criptografia
+|   |-- SettingsManager.kt        # DataStore: credentials, profiles, encryption settings
 |
-|-- transfer/                      # Camada de fila de transferencias
-|   |-- TransferItem.kt           # Modelo de item na fila (estado, progresso, tipo)
-|   |-- TransferManager.kt        # Singleton: fila, semaforo, retry, criptografia
-|   |-- RetryPolicy.kt            # Backoff exponencial com jitter
+|-- transfer/                      # Transfer queue layer
+|   |-- TransferItem.kt           # Transfer item model (state, progress, type)
+|   |-- TransferManager.kt        # Singleton: queue, semaphore, retry, encryption
+|   |-- RetryPolicy.kt            # Exponential backoff with jitter
 |
-|-- service/                       # Camada de servicos (Background)
-|   |-- TransferService.kt        # Foreground Service para notificacoes e background
+|-- service/                       # Service layer (Background)
+|   |-- TransferService.kt        # Foreground Service for notifications and background work
 |
-|-- ui/                            # Camada de apresentacao (Jetpack Compose)
-    |-- FileListScreen.kt         # Tela principal: listagem, navegacao, acoes
-    |-- SettingsScreen.kt         # Configuracao AWS, perfis, biometria, criptografia
-    |-- TransferQueueScreen.kt    # Fila de transferencias com progresso
-    |-- ImagePreviewDialog.kt     # Preview de imagem individual com zoom/pan
-    |-- ImageGalleryDialog.kt     # Galeria: swipe entre imagens da pasta
-    |-- VideoPreviewDialog.kt     # Preview de video com ExoPlayer
-    |-- AudioPreviewDialog.kt     # Preview de audio com UI customizada
-    |-- PdfPreviewDialog.kt       # Preview de PDF com PdfRenderer
-    |-- ZoomableImage.kt          # Composable reutilizavel de zoom/pan
-    |-- S3ImageFetcher.kt         # Fetcher do Coil para imagens direto do S3
+|-- ui/                            # Presentation layer (Jetpack Compose)
+    |-- FileListScreen.kt         # Main screen: file listing, navigation, actions
+    |-- SettingsScreen.kt         # AWS config, profiles, biometrics, encryption
+    |-- TransferQueueScreen.kt    # Transfer queue with progress indicators
+    |-- ImagePreviewDialog.kt     # Single image preview with zoom/pan
+    |-- ImageGalleryDialog.kt     # Gallery: swipe between images in the folder
+    |-- VideoPreviewDialog.kt     # Video preview with ExoPlayer
+    |-- AudioPreviewDialog.kt     # Audio preview with custom UI
+    |-- PdfPreviewDialog.kt       # PDF preview with PdfRenderer
+    |-- ZoomableImage.kt          # Reusable zoom/pan composable
+    |-- S3ImageFetcher.kt         # Coil fetcher for images directly from S3
     |-- theme/
         |-- Theme.kt              # Material 3 + Dynamic Colors
 ```
 
-### Fluxo de Dados
+### Data Flow
 
 ```
-[Acao do usuario]
+[User action]
       |
       v
 [FileListScreen] -----> [TransferManager] -----> [EncryptionManager]
       |                        |                        |
-      |                        | (dados encriptados)    |
+      |                        | (encrypted data)       |
       |                        v                        |
       |                 [S3Repository] <---------------'
       |                        |
@@ -145,31 +145,31 @@ com.clouddrive/
 [ImageGalleryDialog / VideoPreviewDialog / AudioPreviewDialog / PdfPreviewDialog]
 ```
 
-### Fluxo de Criptografia
+### Encryption Flow
 
 ```
 Upload:
-  Arquivo (bytes)
+  File (bytes)
     -> EncryptionManager.encrypt()
     -> [IV (12 bytes) | Ciphertext | GCM Tag (128 bits)]
-    -> S3Repository.upload() com metadata { "encrypted": "true" }
+    -> S3Repository.upload() with metadata { "encrypted": "true" }
 
 Download:
-  S3Repository.headObject() -> verifica metadata "encrypted"
+  S3Repository.headObject() -> checks "encrypted" metadata
     -> EncryptionManager.decrypt([IV | Ciphertext])
-    -> bytes originais
+    -> original bytes
 ```
 
 ---
 
-## Pre-requisitos
+## Prerequisites
 
 - **JDK 17**
-- **Android SDK** (via Android Studio ou command-line tools)
-- **Conta AWS** com um bucket S3 criado
-- **Credenciais IAM** (Access Key ID + Secret Access Key) com permissoes no bucket
+- **Android SDK** (via Android Studio or command-line tools)
+- **AWS account** with an S3 bucket created
+- **IAM credentials** (Access Key ID + Secret Access Key) with permissions on the bucket
 
-### Permissoes AWS necessarias (IAM Policy)
+### Required AWS IAM Policy
 
 ```json
 {
@@ -185,8 +185,8 @@ Download:
         "s3:HeadObject"
       ],
       "Resource": [
-        "arn:aws:s3:::SEU-BUCKET-AQUI",
-        "arn:aws:s3:::SEU-BUCKET-AQUI/*"
+        "arn:aws:s3:::YOUR-BUCKET-NAME",
+        "arn:aws:s3:::YOUR-BUCKET-NAME/*"
       ]
     }
   ]
@@ -195,222 +195,222 @@ Download:
 
 ---
 
-## Como Executar
+## Getting Started
 
-### 1. Clonar o repositorio
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/jamessonlps/storage-cloud-drive.git
 cd storage-cloud-drive
 ```
 
-### 2. Configurar o Android SDK
+### 2. Set up the Android SDK
 
-#### Opcao A: Via terminal (sem Android Studio)
+#### Option A: Via terminal (without Android Studio)
 
 ```bash
-# macOS com Homebrew
+# macOS with Homebrew
 brew install --cask android-commandlinetools
 
-# Aceitar licencas
+# Accept licenses
 yes | sdkmanager --sdk_root="/opt/homebrew/share/android-commandlinetools" --licenses
 
-# Instalar componentes necessarios
+# Install required components
 sdkmanager --sdk_root="/opt/homebrew/share/android-commandlinetools" \
   "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 ```
 
-Crie o arquivo `local.properties` na raiz:
+Create `local.properties` at the project root:
 
 ```properties
 sdk.dir=/opt/homebrew/share/android-commandlinetools
 ```
 
-#### Opcao B: Via Android Studio
+#### Option B: Via Android Studio
 
-Abra o projeto e aguarde a sincronizacao do Gradle.
+Open the project and wait for Gradle sync to complete.
 
-### 3. Compilar
+### 3. Build
 
 ```bash
 ./gradlew assembleDebug
-# APK gerado em: app/build/outputs/apk/debug/app-debug.apk
+# APK output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 4. Instalar no dispositivo
+### 4. Install on a device
 
-#### Via ADB (sem Android Studio)
+#### Via ADB (without Android Studio)
 
-1. Ative **Depuracao USB** em Configuracoes > Opcoes do desenvolvedor
-2. Conecte via USB no modo "Transferir arquivos"
-3. Aceite a autorizacao de depuracao no celular
+1. Enable **USB Debugging** in Settings > Developer Options
+2. Connect via USB in "File Transfer" mode
+3. Accept the debugging authorization prompt on the device
 
 ```bash
 export PATH="/opt/homebrew/share/android-commandlinetools/platform-tools:$PATH"
-adb devices                                                      # verificar dispositivo
-adb install app/build/outputs/apk/debug/app-debug.apk           # instalar
-adb install -r app/build/outputs/apk/debug/app-debug.apk        # reinstalar
+adb devices                                                      # verify device is detected
+adb install app/build/outputs/apk/debug/app-debug.apk           # install
+adb install -r app/build/outputs/apk/debug/app-debug.apk        # reinstall
 ```
 
 #### Via Gradle
 
 ```bash
-./gradlew installDebug   # compila e instala automaticamente
+./gradlew installDebug   # builds and installs automatically
 ```
 
-### 5. Configurar o S3 no app
+### 5. Configure S3 in the app
 
-Na primeira execucao, preencha as credenciais na tela de configuracoes:
+On first launch, fill in your credentials in the Settings screen:
 
-| Campo | Descricao | Exemplo |
+| Field | Description | Example |
 |---|---|---|
-| **Access Key ID** | Chave de acesso IAM | `AKIAIOSFODNN7EXAMPLE` |
-| **Secret Access Key** | Chave secreta IAM | `wJalrXUtnFEMI/K7MDENG/...` |
-| **Regiao** | Regiao AWS do bucket | `us-east-1` |
-| **Nome do Bucket** | Nome do bucket S3 | `meu-drive-pessoal` |
+| **Access Key ID** | IAM access key | `AKIAIOSFODNN7EXAMPLE` |
+| **Secret Access Key** | IAM secret key | `wJalrXUtnFEMI/K7MDENG/...` |
+| **Region** | AWS region of the bucket | `us-east-1` |
+| **Bucket Name** | S3 bucket name | `my-personal-drive` |
 
 ---
 
-## Uso do Aplicativo
+## Usage
 
-### Navegacao
+### Navigation
 
-- **Tela principal**: lista arquivos e pastas do bucket
-- **Entrar em pasta**: toque na pasta desejada
-- **Voltar**: toque em `..` ou no botao Back
-- **Atualizar**: icone de refresh na barra superior
-- **Alternar grade/lista**: icone na barra superior
+- **Main screen**: lists files and folders in the bucket
+- **Enter folder**: tap a folder
+- **Go back**: tap `..` or the Back button
+- **Refresh**: refresh icon in the top bar
+- **Toggle grid/list**: icon in the top bar
 
-### Operacoes com Arquivos
+### File Operations
 
-| Acao | Como fazer |
+| Action | How to |
 |---|---|
-| Upload de 1 arquivo | Botao `+` > selecionar arquivo |
-| Upload de varios arquivos | Botao `+` > selecionar multiplos arquivos |
-| Upload por compartilhamento | Compartilhar de outro app > selecionar Cloud Drive S3 |
-| Download | Icone de download no arquivo |
-| Excluir | Icone de lixeira > confirmar |
-| Criar pasta | Icone de pasta na barra superior |
-| Preview | Toque no arquivo (imagens, videos, audios, PDFs) |
+| Upload 1 file | `+` button > select file |
+| Upload multiple files | `+` button > select multiple files |
+| Upload via share | Share from another app > select Cloud Drive S3 |
+| Download | Download icon on the file |
+| Delete | Trash icon > confirm |
+| Create folder | Folder icon in the top bar |
+| Preview | Tap the file (images, videos, audio, PDFs) |
 
-### Galeria de Imagens
+### Image Gallery
 
-- Toque em qualquer imagem para abrir o preview
-- Deslize horizontalmente para navegar entre imagens da pasta
-- Pinch-to-zoom ou toque duplo para ampliar
-- Quando ampliado, arraste para deslocar; quando em 1x, deslize para proxima imagem
+- Tap any image to open the preview
+- Swipe horizontally to navigate between images in the folder
+- Pinch-to-zoom or double-tap to zoom in
+- When zoomed in, drag to pan; when at 1x, swipe to go to the next image
 
-### Preview de Video
+### Video Preview
 
-- Reproduz diretamente no app com controles nativos do ExoPlayer
-- Suporta os formatos suportados pelo codec do dispositivo (MP4, MKV, WebM, etc.)
+- Plays directly in the app with native ExoPlayer controls
+- Supports all formats handled by the device codec (MP4, MKV, WebM, etc.)
 
-### Preview de Audio
+### Audio Preview
 
-- Interface customizada com: play/pause, barra de seek, duracao, pular +-10s
-- Icone colorido por formato (MP3, AAC, OGG, FLAC, etc.)
+- Custom UI with: play/pause, seek bar, duration display, ±10s skip
+- Color-coded icon by format (MP3, AAC, OGG, FLAC, etc.)
 
-### Preview de PDF
+### PDF Preview
 
-- Renderiza via `PdfRenderer` nativo do Android
-- Navegue entre paginas deslizando horizontalmente
-- Indicador "Pagina X de Y" no topo
+- Rendered via Android's native `PdfRenderer`
+- Swipe horizontally to navigate between pages
+- "Page X of Y" indicator at the top
 
-### Fila de Transferencias
+### Transfer Queue
 
-- Acesse pelo icone na barra inferior (mostra badge com contagem ativa)
-- Acompanhe progresso individual de cada transferencia
-- Erros sao retentados automaticamente com backoff exponencial
+- Access via the icon in the bottom navigation bar (shows a badge with the active count)
+- Track individual progress for each transfer
+- Failed transfers are retried automatically with exponential backoff
 
-### Criptografia
+### Encryption
 
-1. Va em **Configuracoes > Seguranca**
-2. Ative **"Criptografia AES-256"**
-3. Uma chave unica e gerada para o seu perfil e salva com seguranca
-4. A partir dai, todos os uploads sao criptografados automaticamente
-5. Downloads de arquivos marcados como criptografados sao descriptografados automaticamente
+1. Go to **Settings > Security**
+2. Enable **"AES-256 Encryption"**
+3. A unique key is generated for your profile and stored securely
+4. From that point on, all uploads are encrypted automatically
+5. Downloads of encrypted files are decrypted automatically
 
-> Arquivos enviados sem criptografia continuam legíveis normalmente. A criptografia e retrocompativel.
+> Files uploaded without encryption remain readable normally. Encryption is fully backwards-compatible.
 
 ---
 
-## Stack Tecnologica
+## Tech Stack
 
-| Tecnologia | Versao | Uso |
+| Technology | Version | Purpose |
 |---|---|---|
-| **Kotlin** | 1.9.22 | Linguagem principal |
-| **Jetpack Compose** | BOM 2023.10.01 | Framework de UI declarativa |
-| **Material 3** | Compose M3 | Design system e componentes |
-| **AWS SDK for Kotlin** | 1.0.30 | Comunicacao com Amazon S3 |
-| **Media3 / ExoPlayer** | 1.2.1 | Reproducao de video e audio |
-| **DataStore Preferences** | 1.0.0 | Persistencia de configuracoes |
-| **Security Crypto** | 1.1.0-alpha06 | EncryptedSharedPreferences para credenciais |
-| **Biometric** | 1.1.0 | Autenticacao biometrica |
-| **Coil** | 2.5.0 | Carregamento de imagens/thumbnails |
-| **Kotlin Coroutines** | 1.7.3 | Operacoes assincronas e concorrencia |
-| **Navigation Compose** | 2.7.6 | Navegacao entre telas |
-| **javax.crypto** | Android built-in | AES-256-GCM (criptografia) |
-| **PdfRenderer** | Android built-in | Renderizacao de PDFs |
+| **Kotlin** | 1.9.22 | Main language |
+| **Jetpack Compose** | BOM 2023.10.01 | Declarative UI framework |
+| **Material 3** | Compose M3 | Design system and components |
+| **AWS SDK for Kotlin** | 1.0.30 | Amazon S3 communication |
+| **Media3 / ExoPlayer** | 1.2.1 | Video and audio playback |
+| **DataStore Preferences** | 1.0.0 | Settings persistence |
+| **Security Crypto** | 1.1.0-alpha06 | EncryptedSharedPreferences for credentials |
+| **Biometric** | 1.1.0 | Biometric authentication |
+| **Coil** | 2.5.0 | Image and thumbnail loading |
+| **Kotlin Coroutines** | 1.7.3 | Async operations and concurrency |
+| **Navigation Compose** | 2.7.6 | Screen navigation |
+| **javax.crypto** | Android built-in | AES-256-GCM encryption |
+| **PdfRenderer** | Android built-in | PDF rendering |
 | **Android Gradle Plugin** | 8.2.2 | Build system |
-| **Gradle** | 8.5 | Gerenciador de dependencias |
+| **Gradle** | 8.5 | Dependency management |
 
 ---
 
-## Seguranca
+## Security
 
-### Criptografia em repouso (AES-256-GCM)
+### Encryption at rest (AES-256-GCM)
 
-- Algoritmo: AES-256-GCM (autenticado — garante confidencialidade e integridade)
-- IV de 12 bytes gerado aleatoriamente por arquivo
-- Layout do ciphertext: `[IV (12 bytes)][Ciphertext + GCM Tag (128 bits)]`
-- Chave de 256 bits gerada com `KeyGenerator` e armazenada em `EncryptedSharedPreferences`
-- Arquivo S3 recebe metadata `x-amz-meta-encrypted: true` para identificacao automatica
+- Algorithm: AES-256-GCM (authenticated — provides both confidentiality and integrity)
+- 12-byte IV generated randomly per file
+- Ciphertext layout: `[IV (12 bytes)][Ciphertext + GCM Tag (128 bits)]`
+- 256-bit key generated with `KeyGenerator` and stored in `EncryptedSharedPreferences`
+- S3 object receives metadata `x-amz-meta-encrypted: true` for automatic detection on download
 
-### Credenciais
+### Credentials
 
-- Salvas no `EncryptedSharedPreferences` (backed by Android Keystore)
-- Nunca escritas em texto claro em disco ou logs
-- Campo de senha com toggle de visibilidade para Secret Access Key
+- Stored in `EncryptedSharedPreferences` (backed by Android Keystore)
+- Never written in plaintext to disk or logs
+- Secret Access Key field has a visibility toggle
 
-### Comunicacao
+### Communication
 
-- `usesCleartextTraffic=false` no Manifest — apenas HTTPS
-- AWS SDK usa TLS 1.2+ por padrao
+- `usesCleartextTraffic=false` in the Manifest — HTTPS only
+- AWS SDK uses TLS 1.2+ by default
 
-> **Nota de producao**: considere **AWS Cognito** ou **STS (Security Token Service)** em vez de chaves IAM estaticas de longa duracao.
+> **Production note**: consider **AWS Cognito** or **STS (Security Token Service)** instead of long-lived static IAM keys.
 
 ---
 
-## Comandos de Build
+## Build Commands
 
 ```bash
-# Build debug
+# Debug build
 ./gradlew assembleDebug
 
-# Build release (configure assinatura primeiro em app/build.gradle.kts)
+# Release build (configure signing in app/build.gradle.kts first)
 ./gradlew assembleRelease
 
-# Compilar + instalar no dispositivo conectado
+# Build + install on connected device
 ./gradlew installDebug
 
-# Build completo com verificacoes
+# Full build with checks
 ./gradlew build
 
 # Lint
 ./gradlew lint
 
-# Pular lint durante desenvolvimento
+# Skip lint during development
 ./gradlew assembleDebug -x lint
 
-# Limpar artefatos
+# Clean build artifacts
 ./gradlew clean
 ```
 
 ---
 
-## Configuracao de Build
+## Build Configuration
 
-| Parametro | Valor |
+| Parameter | Value |
 |---|---|
 | **Compile SDK** | 34 (Android 14) |
 | **Min SDK** | 26 (Android 8.0) |
@@ -422,40 +422,40 @@ Na primeira execucao, preencha as credenciais na tela de configuracoes:
 
 ---
 
-## Proximos Passos / Roadmap
+## Roadmap
 
-### Alta prioridade
+### High priority
 
-- [ ] **Compartilhar arquivos do S3** — gerar link pre-assinado com validade configuravel
-- [ ] **Busca de arquivos** — filtrar por nome na pasta atual ou recursivamente
-- [ ] **Renomear arquivos e pastas** — operacao de copia + delete no S3
-- [ ] **Mover arquivos** — selecionar destino ou arrastar para outra pasta
+- [ ] **Share files from S3** — generate a pre-signed URL with configurable expiration
+- [ ] **File search** — filter by name in the current folder or recursively
+- [ ] **Rename files and folders** — copy + delete operation on S3
+- [ ] **Move files** — select a destination folder or drag to another folder
 
-### Media prioridade
+### Medium priority
 
-- [ ] **Selecao multipla** — selecionar varios arquivos para download/exclusao em lote
-- [ ] **Ordenacao e filtros** — ordenar por nome, tamanho, data; filtrar por tipo
-- [ ] **Favoritos** — marcar arquivos/pastas para acesso rapido
-- [ ] **Historico de transferencias** — log persistente de uploads e downloads
+- [ ] **Multi-select** — select multiple files for batch download or deletion
+- [ ] **Sort and filter** — sort by name, size, date; filter by type
+- [ ] **Favorites** — bookmark files/folders for quick access
+- [ ] **Transfer history** — persistent log of past uploads and downloads
 
-### Melhorias tecnicas
+### Technical improvements
 
-- [ ] **Testes unitarios** — cobertura de `S3Repository`, `TransferManager`, `EncryptionManager`
-- [ ] **Testes instrumentados** — fluxos de UI com Compose Testing
-- [ ] **ProGuard para release** — habilitar minificacao e otimizacao
-- [ ] **Build de release assinado** — configurar keystore e signing config
-- [ ] **AWS Cognito** — substituir chaves IAM estaticas por tokens temporarios
+- [ ] **Unit tests** — coverage for `S3Repository`, `TransferManager`, `EncryptionManager`
+- [ ] **Instrumented tests** — UI flows with Compose Testing
+- [ ] **ProGuard for release** — enable minification and optimization
+- [ ] **Signed release build** — configure keystore and signing config
+- [ ] **AWS Cognito** — replace static IAM keys with temporary tokens
 
-### Novas funcionalidades
+### New features
 
-- [ ] **Widget de upload** — enviar arquivos direto da tela inicial do Android
-- [ ] **Auto-backup de fotos** — sincronizar a galeria automaticamente com o S3
-- [ ] **Modo offline** — cache local dos arquivos visualizados recentemente
-- [ ] **Compressao antes do upload** — reduzir tamanho de imagens e videos
-- [ ] **Sincronizacao de pastas** — manter uma pasta local espelhada no S3
+- [ ] **Upload widget** — send files directly from the Android home screen
+- [ ] **Photo auto-backup** — automatically sync the gallery with S3
+- [ ] **Offline mode** — local cache of recently viewed files
+- [ ] **Compress before upload** — reduce image and video size before sending
+- [ ] **Folder sync** — keep a local folder mirrored in S3
 
 ---
 
-## Licenca
+## License
 
-Este projeto e distribuido sob a licenca MIT. Veja o arquivo `LICENSE` para mais detalhes.
+This project is distributed under the MIT License. See the `LICENSE` file for details.
