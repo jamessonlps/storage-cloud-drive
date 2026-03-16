@@ -1,10 +1,17 @@
 package com.clouddrive.s3
 
+import aws.sdk.kotlin.services.s3.model.AbortMultipartUploadRequest
+import aws.sdk.kotlin.services.s3.model.CompleteMultipartUploadRequest
+import aws.sdk.kotlin.services.s3.model.CompletedMultipartUpload
+import aws.sdk.kotlin.services.s3.model.CompletedPart
+import aws.sdk.kotlin.services.s3.model.CreateMultipartUploadRequest
 import aws.sdk.kotlin.services.s3.model.DeleteObjectRequest
 import aws.sdk.kotlin.services.s3.model.GetObjectRequest
+import aws.sdk.kotlin.services.s3.model.HeadObjectRequest
 import aws.sdk.kotlin.services.s3.model.ListObjectsV2Request
 import aws.sdk.kotlin.services.s3.model.ListObjectsV2Response
 import aws.sdk.kotlin.services.s3.model.PutObjectRequest
+import aws.sdk.kotlin.services.s3.model.UploadPartRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
 import kotlinx.coroutines.async
@@ -127,6 +134,107 @@ class S3Repository(private val config: S3Config) {
         client.putObject(request)
     }
 
+    suspend fun uploadFileWithProgress(
+        key: String,
+        inputStream: InputStream,
+        contentType: String?,
+        totalSize: Long,
+        metadata: Map<String, String>? = null,
+        onProgress: (bytesTransferred: Long) -> Unit,
+    ) {
+        val bytes = inputStream.readBytes()
+        onProgress(bytes.size.toLong())
+        val request = PutObjectRequest {
+            this.bucket = this@S3Repository.bucket
+            this.key = key
+            this.contentType = contentType
+            this.body = ByteStream.fromBytes(bytes)
+            if (metadata != null) this.metadata = metadata
+        }
+        client.putObject(request)
+        onProgress(totalSize)
+    }
+
+    suspend fun uploadMultipart(
+        key: String,
+        inputStream: InputStream,
+        contentType: String?,
+        totalSize: Long,
+        partSizeBytes: Long = 5L * 1024 * 1024,
+        metadata: Map<String, String>? = null,
+        onPartCompleted: (partNumber: Int, completedPartsCount: Int, bytesTransferred: Long) -> Unit,
+    ) {
+        val createReq = CreateMultipartUploadRequest {
+            this.bucket = this@S3Repository.bucket
+            this.key = key
+            this.contentType = contentType
+            if (metadata != null) this.metadata = metadata
+        }
+        val createResp = client.createMultipartUpload(createReq)
+        val uploadId = createResp.uploadId ?: throw Exception("Falha ao iniciar multipart upload")
+
+        try {
+            val completedParts = mutableListOf<CompletedPart>()
+            var partNumber = 1
+            var totalBytesRead = 0L
+
+            while (totalBytesRead < totalSize) {
+                val remaining = totalSize - totalBytesRead
+                val chunkSize = minOf(partSizeBytes, remaining).toInt()
+                val buffer = ByteArray(chunkSize)
+
+                var bytesReadForChunk = 0
+                while (bytesReadForChunk < chunkSize) {
+                    val read = inputStream.read(buffer, bytesReadForChunk, chunkSize - bytesReadForChunk)
+                    if (read == -1) break
+                    bytesReadForChunk += read
+                }
+
+                if (bytesReadForChunk == 0) break
+
+                val partData = if (bytesReadForChunk == chunkSize) buffer else buffer.copyOf(bytesReadForChunk)
+
+                val uploadPartReq = UploadPartRequest {
+                    this.bucket = this@S3Repository.bucket
+                    this.key = key
+                    this.uploadId = uploadId
+                    this.partNumber = partNumber
+                    this.body = ByteStream.fromBytes(partData)
+                }
+                val partResp = client.uploadPart(uploadPartReq)
+
+                completedParts.add(CompletedPart {
+                    this.partNumber = partNumber
+                    this.eTag = partResp.eTag
+                })
+
+                totalBytesRead += bytesReadForChunk
+                onPartCompleted(partNumber, completedParts.size, totalBytesRead)
+                partNumber++
+            }
+
+            val completeReq = CompleteMultipartUploadRequest {
+                this.bucket = this@S3Repository.bucket
+                this.key = key
+                this.uploadId = uploadId
+                this.multipartUpload = CompletedMultipartUpload {
+                    this.parts = completedParts.sortedBy { it.partNumber }
+                }
+            }
+            client.completeMultipartUpload(completeReq)
+        } catch (e: Exception) {
+            try {
+                val abortReq = AbortMultipartUploadRequest {
+                    this.bucket = this@S3Repository.bucket
+                    this.key = key
+                    this.uploadId = uploadId
+                }
+                client.abortMultipartUpload(abortReq)
+            } catch (_: Exception) {}
+            throw e
+        }
+    }
+
     suspend fun downloadFileAsBytes(key: String): ByteArray {
         val request = GetObjectRequest {
             this.bucket = this@S3Repository.bucket
@@ -161,6 +269,15 @@ class S3Repository(private val config: S3Config) {
             result = response.body?.toByteArray() ?: byteArrayOf()
         }
         return result
+    }
+
+    suspend fun headObject(key: String): Map<String, String> {
+        val request = HeadObjectRequest {
+            this.bucket = this@S3Repository.bucket
+            this.key = key
+        }
+        val response = client.headObject(request)
+        return response.metadata ?: emptyMap()
     }
 
     suspend fun deleteFile(key: String) {

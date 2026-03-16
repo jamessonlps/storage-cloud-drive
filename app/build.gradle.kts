@@ -74,6 +74,11 @@ dependencies {
     // Biometric authentication
     implementation("androidx.biometric:biometric:1.1.0")
 
+    // Media3 (ExoPlayer) for video/audio playback
+    implementation("androidx.media3:media3-exoplayer:1.2.1")
+    implementation("androidx.media3:media3-ui:1.2.1")
+    implementation("androidx.media3:media3-common:1.2.1")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

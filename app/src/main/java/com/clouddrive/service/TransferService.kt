@@ -7,212 +7,95 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Environment
 import android.os.IBinder
-import android.provider.OpenableColumns
 import androidx.core.app.NotificationCompat
 import com.clouddrive.MainActivity
-import com.clouddrive.R
-import com.clouddrive.s3.S3Config
-import com.clouddrive.s3.S3Repository
+import com.clouddrive.transfer.TransferManager
+import com.clouddrive.transfer.TransferState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
 
 class TransferService : Service() {
 
     companion object {
         const val CHANNEL_ID = "transfer_channel"
-        const val ACTION_UPLOAD = "com.clouddrive.action.UPLOAD"
-        const val ACTION_DOWNLOAD = "com.clouddrive.action.DOWNLOAD"
-        const val EXTRA_FILE_URI = "extra_file_uri"
-        const val EXTRA_FILE_KEY = "extra_file_key"
-        const val EXTRA_PREFIX = "extra_prefix"
-        const val EXTRA_ACCESS_KEY = "extra_access_key"
-        const val EXTRA_SECRET_KEY = "extra_secret_key"
-        const val EXTRA_REGION = "extra_region"
-        const val EXTRA_BUCKET = "extra_bucket"
-        const val EXTRA_FILE_NAME = "extra_file_name"
 
-        private val nextNotificationId = AtomicInteger(1000)
-
-        fun uploadIntent(
-            context: Context,
-            uri: Uri,
-            prefix: String,
-            fileName: String,
-            config: S3Config,
-        ): Intent {
-            return Intent(context, TransferService::class.java).apply {
-                action = ACTION_UPLOAD
-                putExtra(EXTRA_FILE_URI, uri.toString())
-                putExtra(EXTRA_PREFIX, prefix)
-                putExtra(EXTRA_FILE_NAME, fileName)
-                putExtra(EXTRA_ACCESS_KEY, config.accessKeyId)
-                putExtra(EXTRA_SECRET_KEY, config.secretAccessKey)
-                putExtra(EXTRA_REGION, config.region)
-                putExtra(EXTRA_BUCKET, config.bucketName)
-            }
-        }
-
-        fun downloadIntent(
-            context: Context,
-            fileKey: String,
-            fileName: String,
-            config: S3Config,
-        ): Intent {
-            return Intent(context, TransferService::class.java).apply {
-                action = ACTION_DOWNLOAD
-                putExtra(EXTRA_FILE_KEY, fileKey)
-                putExtra(EXTRA_FILE_NAME, fileName)
-                putExtra(EXTRA_ACCESS_KEY, config.accessKeyId)
-                putExtra(EXTRA_SECRET_KEY, config.secretAccessKey)
-                putExtra(EXTRA_REGION, config.region)
-                putExtra(EXTRA_BUCKET, config.bucketName)
-            }
+        fun ensureRunning(context: Context) {
+            val intent = Intent(context, TransferService::class.java)
+            context.startForegroundService(intent)
         }
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val activeTasks = AtomicInteger(0)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var notificationManager: NotificationManager
+    private val activeNotificationIds = mutableSetOf<Int>()
 
     override fun onCreate() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
+        observeTransfers()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
-            stopSelfIfIdle()
-            return START_NOT_STICKY
-        }
-
-        val config = S3Config(
-            accessKeyId = intent.getStringExtra(EXTRA_ACCESS_KEY) ?: return stopAndReturn(),
-            secretAccessKey = intent.getStringExtra(EXTRA_SECRET_KEY) ?: return stopAndReturn(),
-            region = intent.getStringExtra(EXTRA_REGION) ?: return stopAndReturn(),
-            bucketName = intent.getStringExtra(EXTRA_BUCKET) ?: return stopAndReturn(),
-        )
-
-        activeTasks.incrementAndGet()
-
-        // Ensure foreground with a summary notification
-        startForeground(1, buildSummaryNotification())
-
-        when (intent.action) {
-            ACTION_UPLOAD -> handleUpload(intent, config)
-            ACTION_DOWNLOAD -> handleDownload(intent, config)
-            else -> {
-                activeTasks.decrementAndGet()
-                stopSelfIfIdle()
-            }
-        }
-
+        startForeground(1, buildSummaryNotification(0))
         return START_NOT_STICKY
     }
 
-    private fun handleUpload(intent: Intent, config: S3Config) {
-        val uriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return taskDone()
-        val uri = Uri.parse(uriString)
-        val prefix = intent.getStringExtra(EXTRA_PREFIX) ?: ""
-        val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "arquivo_${System.currentTimeMillis()}"
-        val notifId = nextNotificationId.getAndIncrement()
-
-        val repository = S3Repository(config)
-
-        showProgressNotification(notifId, "Enviando", fileName)
-
+    private fun observeTransfers() {
         serviceScope.launch {
-            try {
-                val key = prefix + fileName
-                val contentType = contentResolver.getType(uri)
-                val inputStream = contentResolver.openInputStream(uri)
-                    ?: throw Exception("Nao foi possivel ler o arquivo")
-
-                inputStream.use { stream ->
-                    repository.uploadFile(key, stream, contentType)
+            TransferManager.transfers.collect { items ->
+                val active = items.filter {
+                    it.state in setOf(
+                        TransferState.QUEUED,
+                        TransferState.UPLOADING,
+                        TransferState.DOWNLOADING,
+                        TransferState.RETRYING,
+                    )
                 }
 
-                showCompleteNotification(notifId, "Upload concluido", fileName)
-                sendBroadcastUpdate()
-            } catch (e: Exception) {
-                showErrorNotification(notifId, "Erro no upload", "${fileName}: ${e.message}")
-            } finally {
-                taskDone()
+                if (active.isEmpty() && items.any { it.state == TransferState.COMPLETED || it.state == TransferState.FAILED }) {
+                    // All done, clean up
+                    activeNotificationIds.forEach { notificationManager.cancel(it) }
+                    activeNotificationIds.clear()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@collect
+                }
+
+                if (active.isEmpty()) {
+                    // Nothing to show
+                    return@collect
+                }
+
+                // Update summary notification
+                notificationManager.notify(1, buildSummaryNotification(active.size))
+
+                // Update individual progress notifications
+                val currentIds = mutableSetOf<Int>()
+                active.forEach { item ->
+                    val notifId = item.id.hashCode().let { if (it == 1) 2 else it } // avoid collision with summary (id=1)
+                    currentIds.add(notifId)
+                    notificationManager.notify(notifId, buildProgressNotification(item))
+                }
+
+                // Remove notifications for items no longer active
+                (activeNotificationIds - currentIds).forEach { notificationManager.cancel(it) }
+                activeNotificationIds.clear()
+                activeNotificationIds.addAll(currentIds)
             }
         }
     }
 
-    private fun handleDownload(intent: Intent, config: S3Config) {
-        val fileKey = intent.getStringExtra(EXTRA_FILE_KEY) ?: return taskDone()
-        val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: fileKey.substringAfterLast('/')
-        val notifId = nextNotificationId.getAndIncrement()
-
-        val repository = S3Repository(config)
-
-        showProgressNotification(notifId, "Baixando", fileName)
-
-        serviceScope.launch {
-            try {
-                val dest = File(
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    "CloudDriveS3/$fileName"
-                )
-                repository.downloadFile(fileKey, dest)
-
-                showCompleteNotification(notifId, "Download concluido", dest.absolutePath)
-                sendBroadcastUpdate()
-            } catch (e: Exception) {
-                showErrorNotification(notifId, "Erro no download", "${fileName}: ${e.message}")
-            } finally {
-                taskDone()
-            }
+    private fun buildSummaryNotification(activeCount: Int): Notification {
+        val text = when (activeCount) {
+            0 -> "Iniciando..."
+            1 -> "1 transferencia em andamento"
+            else -> "$activeCount transferencias em andamento"
         }
-    }
-
-    private fun taskDone() {
-        val remaining = activeTasks.decrementAndGet()
-        if (remaining <= 0) {
-            stopSelfIfIdle()
-        } else {
-            notificationManager.notify(1, buildSummaryNotification())
-        }
-    }
-
-    private fun stopSelfIfIdle() {
-        if (activeTasks.get() <= 0) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
-    }
-
-    private fun stopAndReturn(): Int {
-        stopSelfIfIdle()
-        return START_NOT_STICKY
-    }
-
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Transferencias",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = "Notificacoes de upload e download de arquivos"
-        }
-        notificationManager.createNotificationChannel(channel)
-    }
-
-    private fun buildSummaryNotification(): Notification {
-        val count = activeTasks.get()
-        val text = if (count == 1) "1 transferencia em andamento"
-        else "$count transferencias em andamento"
 
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -230,40 +113,48 @@ class TransferService : Service() {
             .build()
     }
 
-    private fun showProgressNotification(id: Int, title: String, fileName: String) {
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+    private fun buildProgressNotification(item: com.clouddrive.transfer.TransferItem): Notification {
+        val title = when (item.state) {
+            TransferState.UPLOADING -> "Enviando"
+            TransferState.DOWNLOADING -> "Baixando"
+            TransferState.RETRYING -> "Retentando (${item.retryCount}/${item.maxRetries})"
+            TransferState.QUEUED -> "Na fila"
+            else -> "Transferindo"
+        }
+
+        val progress = (item.progress * 100).toInt()
+        val isIndeterminate = item.state == TransferState.QUEUED || item.totalBytes == 0L
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(
+                if (item.type == com.clouddrive.transfer.TransferType.UPLOAD)
+                    android.R.drawable.stat_sys_upload
+                else
+                    android.R.drawable.stat_sys_download,
+            )
             .setContentTitle(title)
-            .setContentText(fileName)
-            .setProgress(0, 0, true)
+            .setContentText(item.fileName)
             .setOngoing(true)
-            .build()
-        notificationManager.notify(id, notification)
+
+        if (isIndeterminate) {
+            builder.setProgress(0, 0, true)
+        } else {
+            builder.setProgress(100, progress, false)
+            builder.setSubText("$progress%")
+        }
+
+        return builder.build()
     }
 
-    private fun showCompleteNotification(id: Int, title: String, detail: String) {
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setContentTitle(title)
-            .setContentText(detail)
-            .setAutoCancel(true)
-            .build()
-        notificationManager.notify(id, notification)
-    }
-
-    private fun showErrorNotification(id: Int, title: String, detail: String) {
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle(title)
-            .setContentText(detail)
-            .setAutoCancel(true)
-            .build()
-        notificationManager.notify(id, notification)
-    }
-
-    private fun sendBroadcastUpdate() {
-        val intent = Intent(ACTION_TRANSFER_COMPLETE)
-        sendBroadcast(intent)
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Transferencias",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "Notificacoes de upload e download de arquivos"
+        }
+        notificationManager.createNotificationChannel(channel)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

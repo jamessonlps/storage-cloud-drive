@@ -87,8 +87,11 @@ import coil.compose.AsyncImage
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3FileItem
 import com.clouddrive.s3.S3Repository
+import com.clouddrive.s3.SettingsManager
 import com.clouddrive.service.ACTION_TRANSFER_COMPLETE
-import com.clouddrive.service.TransferService
+import com.clouddrive.transfer.TransferItem
+import com.clouddrive.transfer.TransferManager
+import com.clouddrive.transfer.TransferType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -109,6 +112,8 @@ fun FileListScreen(
     clearSelectionTrigger: Int,
     deleteSelectedTrigger: Int,
     downloadSelectedTrigger: Int,
+    settingsManager: SettingsManager? = null,
+    profileName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -122,6 +127,9 @@ fun FileListScreen(
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var previewImageKey by remember { mutableStateOf<S3FileItem?>(null) }
+    var previewVideoKey by remember { mutableStateOf<S3FileItem?>(null) }
+    var previewAudioKey by remember { mutableStateOf<S3FileItem?>(null) }
+    var previewPdfKey by remember { mutableStateOf<S3FileItem?>(null) }
     var continuationToken by remember { mutableStateOf<String?>(null) }
     var hasMore by remember { mutableStateOf(false) }
 
@@ -173,8 +181,13 @@ fun FileListScreen(
         if (downloadSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
             val filesToDownload = files.filter { it.key in selectedKeys && !it.isFolder }
             filesToDownload.forEach { file ->
-                val intent = TransferService.downloadIntent(context, file.key, file.fileName, config)
-                context.startForegroundService(intent)
+                val item = TransferItem(
+                    fileName = file.fileName,
+                    s3Key = file.key,
+                    type = TransferType.DOWNLOAD,
+                    totalBytes = file.size,
+                )
+                TransferManager.enqueue(item, config, context, settingsManager, profileName)
             }
             Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()
             clearSelection()
@@ -271,13 +284,29 @@ fun FileListScreen(
     }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri ?: return@rememberLauncherForActivityResult
-        val fileName = getFileName(context, uri) ?: "arquivo_${System.currentTimeMillis()}"
-        val intent = TransferService.uploadIntent(context, uri, currentPrefix, fileName, config)
-        context.startForegroundService(intent)
-        Toast.makeText(context, "Upload iniciado: $fileName", Toast.LENGTH_SHORT).show()
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        uris.forEach { uri ->
+            val fileName = getFileName(context, uri) ?: "arquivo_${System.currentTimeMillis()}"
+            val fileSize = getFileSize(context, uri)
+            val contentType = context.contentResolver.getType(uri)
+            val item = TransferItem(
+                fileName = fileName,
+                s3Key = currentPrefix + fileName,
+                type = TransferType.UPLOAD,
+                totalBytes = fileSize,
+                sourceUri = uri.toString(),
+                contentType = contentType,
+                prefix = currentPrefix,
+            )
+            TransferManager.enqueue(item, config, context, settingsManager, profileName)
+        }
+        Toast.makeText(
+            context,
+            "Upload iniciado: ${uris.size} arquivo(s)",
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     val listState = rememberLazyListState()
@@ -357,6 +386,15 @@ fun FileListScreen(
                                 isSelectionMode = isSelectionMode,
                                 isSelected = file.key in selectedKeys,
                                 onFolderClick = { onNavigateToFolder(file.key) },
+                                onFileClick = {
+                                    val ext = file.fileName.substringAfterLast('.', "").lowercase()
+                                    when {
+                                        ext in imageExtensions -> previewImageKey = file
+                                        ext in videoExtensions -> previewVideoKey = file
+                                        ext in audioExtensions -> previewAudioKey = file
+                                        ext == "pdf" -> previewPdfKey = file
+                                    }
+                                },
                                 onLongClick = {
                                     if (!isSelectionMode) {
                                         isSelectionMode = true
@@ -389,12 +427,23 @@ fun FileListScreen(
                                 isSelectionMode = isSelectionMode,
                                 isSelected = file.key in selectedKeys,
                                 onFolderClick = { onNavigateToFolder(file.key) },
-                                onImageClick = { previewImageKey = file },
+                                onFileClick = {
+                                    val ext = file.fileName.substringAfterLast('.', "").lowercase()
+                                    when {
+                                        ext in imageExtensions -> previewImageKey = file
+                                        ext in videoExtensions -> previewVideoKey = file
+                                        ext in audioExtensions -> previewAudioKey = file
+                                        ext == "pdf" -> previewPdfKey = file
+                                    }
+                                },
                                 onDownload = {
-                                    val intent = TransferService.downloadIntent(
-                                        context, file.key, file.fileName, config
+                                    val item = TransferItem(
+                                        fileName = file.fileName,
+                                        s3Key = file.key,
+                                        type = TransferType.DOWNLOAD,
+                                        totalBytes = file.size,
                                     )
-                                    context.startForegroundService(intent)
+                                    TransferManager.enqueue(item, config, context, settingsManager, profileName)
                                     Toast.makeText(
                                         context,
                                         "Download iniciado: ${file.fileName}",
@@ -433,7 +482,7 @@ fun FileListScreen(
         // FAB overlay (hidden during selection mode)
         if (!isSelectionMode) {
             FloatingActionButton(
-                onClick = { filePickerLauncher.launch("*/*") },
+                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
@@ -557,13 +606,45 @@ fun FileListScreen(
         )
     }
 
-    // Image preview dialog
+    // Image gallery dialog
     previewImageKey?.let { file ->
-        ImagePreviewDialog(
-            imageKey = file.key,
-            fileName = file.fileName,
+        val imageFiles = files.filter { !it.isFolder && isImageFile(it.fileName) }
+        val initialIndex = imageFiles.indexOfFirst { it.key == file.key }.coerceAtLeast(0)
+        ImageGalleryDialog(
+            imageFiles = imageFiles,
+            initialIndex = initialIndex,
             config = config,
             onDismiss = { previewImageKey = null },
+        )
+    }
+
+    // Video preview dialog
+    previewVideoKey?.let { file ->
+        VideoPreviewDialog(
+            videoKey = file.key,
+            fileName = file.fileName,
+            config = config,
+            onDismiss = { previewVideoKey = null },
+        )
+    }
+
+    // Audio preview dialog
+    previewAudioKey?.let { file ->
+        AudioPreviewDialog(
+            audioKey = file.key,
+            fileName = file.fileName,
+            config = config,
+            onDismiss = { previewAudioKey = null },
+        )
+    }
+
+    // PDF preview dialog
+    previewPdfKey?.let { file ->
+        PdfPreviewDialog(
+            pdfKey = file.key,
+            fileName = file.fileName,
+            config = config,
+            onDismiss = { previewPdfKey = null },
         )
     }
 }
@@ -575,7 +656,7 @@ private fun FileItemCard(
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onFolderClick: () -> Unit,
-    onImageClick: () -> Unit,
+    onFileClick: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
     onLongClick: () -> Unit,
@@ -591,8 +672,8 @@ private fun FileItemCard(
                         onToggleSelect()
                     } else if (file.isFolder) {
                         onFolderClick()
-                    } else if (isImageFile(file.fileName)) {
-                        onImageClick()
+                    } else if (isPreviewableFile(file.fileName)) {
+                        onFileClick()
                     }
                 },
                 onLongClick = onLongClick,
@@ -675,6 +756,7 @@ private fun GridFileItemCard(
     isSelectionMode: Boolean,
     isSelected: Boolean,
     onFolderClick: () -> Unit,
+    onFileClick: () -> Unit,
     onLongClick: () -> Unit,
     onToggleSelect: () -> Unit,
 ) {
@@ -688,6 +770,7 @@ private fun GridFileItemCard(
                 onClick = {
                     if (isSelectionMode) onToggleSelect()
                     else if (file.isFolder) onFolderClick()
+                    else if (isPreviewableFile(file.fileName)) onFileClick()
                 },
                 onLongClick = onLongClick,
             ),
@@ -767,9 +850,24 @@ private val imageExtensions = setOf(
     "ico", "tiff", "tif", "heic", "heif",
 )
 
+private val videoExtensions = setOf(
+    "mp4", "avi", "mkv", "mov", "wmv", "flv",
+    "webm", "m4v", "3gp", "mpeg", "mpg",
+)
+
+private val audioExtensions = setOf(
+    "mp3", "wav", "aac", "ogg", "flac", "m4a",
+    "wma", "opus", "alac", "aiff",
+)
+
 private fun isImageFile(fileName: String): Boolean {
     val ext = fileName.substringAfterLast('.', "").lowercase()
     return ext in imageExtensions
+}
+
+private fun isPreviewableFile(fileName: String): Boolean {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    return ext in imageExtensions || ext in videoExtensions || ext in audioExtensions || ext == "pdf"
 }
 
 private fun getFileIcon(file: S3FileItem): ImageVector {
@@ -834,4 +932,14 @@ private fun getFileName(context: Context, uri: Uri): String? {
         }
     }
     return uri.lastPathSegment
+}
+
+private fun getFileSize(context: Context, uri: Uri): Long {
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+        if (sizeIndex >= 0 && cursor.moveToFirst()) {
+            return cursor.getLong(sizeIndex)
+        }
+    }
+    return 0L
 }

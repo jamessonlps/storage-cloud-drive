@@ -1,6 +1,10 @@
 package com.clouddrive
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
@@ -22,12 +27,15 @@ import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -56,11 +64,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.clouddrive.s3.SettingsManager
+import com.clouddrive.transfer.TransferItem
+import com.clouddrive.transfer.TransferManager
+import com.clouddrive.transfer.TransferState
+import com.clouddrive.transfer.TransferType
 import com.clouddrive.ui.FileListScreen
 import com.clouddrive.ui.SettingsScreen
+import com.clouddrive.ui.TransferQueueScreen
 import com.clouddrive.ui.theme.CloudDriveTheme
 
-enum class Screen { Home, Settings }
+enum class Screen { Home, Settings, Transfers }
 
 class MainActivity : FragmentActivity() {
 
@@ -102,6 +115,12 @@ class MainActivity : FragmentActivity() {
                 val config by settingsManager.configFlow.collectAsState(initial = null)
                 val currentProfileName by settingsManager.currentProfileNameFlow.collectAsState(initial = null)
                 var currentScreen by remember { mutableStateOf(Screen.Home) }
+
+                // Handle share intent
+                LaunchedEffect(config) {
+                    val cfg = config ?: return@LaunchedEffect
+                    handleShareIntent(intent, cfg, settingsManager, currentProfileName)
+                }
 
                 // Folder navigation state (hoisted)
                 var currentPrefix by remember { mutableStateOf("") }
@@ -146,7 +165,7 @@ class MainActivity : FragmentActivity() {
                     pathStack.removeLastOrNull()
                     currentPrefix = pathStack.lastOrNull() ?: ""
                 }
-                BackHandler(enabled = currentScreen == Screen.Settings) {
+                BackHandler(enabled = currentScreen == Screen.Settings || currentScreen == Screen.Transfers) {
                     currentScreen = Screen.Home
                 }
 
@@ -189,6 +208,10 @@ class MainActivity : FragmentActivity() {
                                             )
                                         }
                                     }
+                                    currentScreen == Screen.Transfers -> Text(
+                                        "Transferencias",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
                                     else -> Text("Configuracoes AWS S3")
                                 }
                             },
@@ -237,6 +260,16 @@ class MainActivity : FragmentActivity() {
                                                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
                                         )
                                     }
+                                } else if (currentScreen == Screen.Transfers) {
+                                    val transfers by TransferManager.transfers.collectAsState()
+                                    val hasCompleted = transfers.any {
+                                        it.state == TransferState.COMPLETED || it.state == TransferState.CANCELLED
+                                    }
+                                    if (hasCompleted) {
+                                        IconButton(onClick = { TransferManager.clearCompleted() }) {
+                                            Icon(Icons.Filled.ClearAll, contentDescription = "Limpar concluidos")
+                                        }
+                                    }
                                 } else if (currentScreen == Screen.Home && config != null) {
                                     IconButton(onClick = { isGridView = !isGridView }) {
                                         Icon(
@@ -255,12 +288,30 @@ class MainActivity : FragmentActivity() {
                         )
                     },
                     bottomBar = {
+                        val activeTransferCount by TransferManager.activeCount.collectAsState()
+
                         NavigationBar {
                             NavigationBarItem(
                                 selected = currentScreen == Screen.Home,
                                 onClick = { currentScreen = Screen.Home },
                                 icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
                                 label = { Text("Arquivos") },
+                            )
+                            NavigationBarItem(
+                                selected = currentScreen == Screen.Transfers,
+                                onClick = { currentScreen = Screen.Transfers },
+                                icon = {
+                                    BadgedBox(
+                                        badge = {
+                                            if (activeTransferCount > 0) {
+                                                Badge { Text("$activeTransferCount") }
+                                            }
+                                        },
+                                    ) {
+                                        Icon(Icons.Filled.SwapVert, contentDescription = null)
+                                    }
+                                },
+                                label = { Text("Transferencias") },
                             )
                             NavigationBarItem(
                                 selected = currentScreen == Screen.Settings,
@@ -305,9 +356,17 @@ class MainActivity : FragmentActivity() {
                                     clearSelectionTrigger = clearSelectionTrigger,
                                     deleteSelectedTrigger = deleteSelectedTrigger,
                                     downloadSelectedTrigger = downloadSelectedTrigger,
+                                    settingsManager = settingsManager,
+                                    profileName = currentProfileName,
                                     modifier = Modifier.padding(padding),
                                 )
                             }
+                        }
+                        Screen.Transfers -> {
+                            TransferQueueScreen(
+                                config = config,
+                                modifier = Modifier.padding(padding),
+                            )
                         }
                         Screen.Settings -> {
                             SettingsScreen(
@@ -323,6 +382,68 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    private var shareIntentHandled = false
+
+    private fun handleShareIntent(
+        intent: Intent,
+        config: com.clouddrive.s3.S3Config,
+        settingsManager: SettingsManager,
+        profileName: String?,
+    ) {
+        if (shareIntentHandled) return
+
+        val uris = mutableListOf<Uri>()
+        when (intent.action) {
+            Intent.ACTION_SEND -> {
+                intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.add(it) }
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.addAll(it) }
+            }
+        }
+
+        if (uris.isEmpty()) return
+        shareIntentHandled = true
+
+        uris.forEach { uri ->
+            val fileName = getShareFileName(uri) ?: "arquivo_${System.currentTimeMillis()}"
+            val fileSize = getShareFileSize(uri)
+            val contentType = contentResolver.getType(uri)
+
+            val item = TransferItem(
+                fileName = fileName,
+                s3Key = fileName,
+                type = TransferType.UPLOAD,
+                totalBytes = fileSize,
+                sourceUri = uri.toString(),
+                contentType = contentType,
+            )
+            TransferManager.enqueue(item, config, this, settingsManager, profileName)
+        }
+
+        Toast.makeText(this, "Upload iniciado: ${uris.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun getShareFileName(uri: Uri): String? {
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex >= 0 && cursor.moveToFirst()) {
+                return cursor.getString(nameIndex)
+            }
+        }
+        return uri.lastPathSegment
+    }
+
+    private fun getShareFileSize(uri: Uri): Long {
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (sizeIndex >= 0 && cursor.moveToFirst()) {
+                return cursor.getLong(sizeIndex)
+            }
+        }
+        return 0L
     }
 
     private fun showBiometricPrompt(onSuccess: () -> Unit, onCancel: () -> Unit) {

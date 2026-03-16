@@ -16,6 +16,8 @@ class SettingsManager(context: Context) {
         private const val KEY_PAGE_SIZE = "page_size"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_ENCRYPTION_ENABLED = "encryption_enabled"
+        private const val KEY_ENCRYPTION_KEY = "encryption_key"
         private const val DEFAULT_PROFILE_NAME = "Padrao"
         const val DEFAULT_PAGE_SIZE = 100
         const val THEME_SYSTEM = "system"
@@ -205,5 +207,23 @@ class SettingsManager(context: Context) {
 
     fun saveThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    // --- Encryption Settings (per-profile) ---
+
+    fun isEncryptionEnabled(profileName: String): Boolean {
+        return prefs.getBoolean(profileKey(profileName, KEY_ENCRYPTION_ENABLED), false)
+    }
+
+    fun setEncryptionEnabled(profileName: String, enabled: Boolean) {
+        prefs.edit().putBoolean(profileKey(profileName, KEY_ENCRYPTION_ENABLED), enabled).apply()
+    }
+
+    fun getEncryptionKey(profileName: String): String? {
+        return prefs.getString(profileKey(profileName, KEY_ENCRYPTION_KEY), null)
+    }
+
+    fun saveEncryptionKey(profileName: String, keyBase64: String) {
+        prefs.edit().putString(profileKey(profileName, KEY_ENCRYPTION_KEY), keyBase64).apply()
     }
 }

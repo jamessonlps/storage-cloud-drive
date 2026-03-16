@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.clouddrive.crypto.EncryptionManager
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.SettingsManager
 import kotlinx.coroutines.launch
@@ -379,6 +381,53 @@ fun SettingsScreen(
                     onCheckedChange = {
                         biometricEnabled = it
                         settingsManager.setBiometricEnabled(it)
+                    },
+                )
+            }
+        }
+
+        // Encryption toggle
+        if (selectedProfile.isNotBlank()) {
+            var encryptionEnabled by remember(selectedProfile) {
+                mutableStateOf(settingsManager.isEncryptionEnabled(selectedProfile))
+            }
+
+            if (!canAuthenticate) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Seguranca",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.EnhancedEncryption,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        text = "Criptografia de arquivos",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Criptografa arquivos com AES-256 antes do upload",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = encryptionEnabled,
+                    onCheckedChange = { enabled ->
+                        encryptionEnabled = enabled
+                        settingsManager.setEncryptionEnabled(selectedProfile, enabled)
+                        if (enabled) {
+                            EncryptionManager.getOrCreateKey(settingsManager, selectedProfile)
+                        }
                     },
                 )
             }

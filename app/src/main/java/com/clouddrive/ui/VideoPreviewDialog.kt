@@ -1,5 +1,6 @@
 package com.clouddrive.ui
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,43 +24,73 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3Repository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 @Composable
-fun ImagePreviewDialog(
-    imageKey: String,
+fun VideoPreviewDialog(
+    videoKey: String,
     fileName: String,
     config: S3Config,
     onDismiss: () -> Unit,
 ) {
-    var imageBytes by remember { mutableStateOf<ByteArray?>(null) }
+    val context = LocalContext.current
+
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var tempFile by remember { mutableStateOf<File?>(null) }
 
     val repository = remember(config) { S3Repository(config) }
 
-    LaunchedEffect(imageKey) {
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build()
+    }
+
+    LaunchedEffect(videoKey) {
         isLoading = true
         error = null
         try {
-            imageBytes = withContext(Dispatchers.IO) {
-                repository.downloadFileAsBytes(imageKey)
+            val bytes = withContext(Dispatchers.IO) {
+                repository.downloadFileAsBytes(videoKey)
             }
+            val file = File(context.cacheDir, "video_preview_${videoKey.hashCode()}.tmp")
+            withContext(Dispatchers.IO) {
+                file.writeBytes(bytes)
+            }
+            tempFile = file
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
         } catch (e: Exception) {
-            error = e.message ?: "Erro ao carregar imagem"
+            error = e.message ?: "Erro ao carregar video"
         } finally {
             isLoading = false
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+            tempFile?.delete()
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            exoPlayer.stop()
+            onDismiss()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(
@@ -79,24 +111,33 @@ fun ImagePreviewDialog(
                             text = error!!,
                             color = Color.White,
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.align(Alignment.Center).padding(bottom = 40.dp),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(bottom = 40.dp),
                         )
                         TextButton(
                             onClick = {
                                 error = null
                                 isLoading = true
-                                imageBytes = null
+                                tempFile?.delete()
+                                tempFile = null
                             },
-                            modifier = Modifier.align(Alignment.Center).padding(top = 40.dp),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(top = 40.dp),
                         ) {
                             Text("Tentar novamente", color = Color.White)
                         }
                     }
                 }
-                imageBytes != null -> {
-                    ZoomableImage(
-                        imageBytes = imageBytes!!,
-                        contentDescription = fileName,
+                tempFile != null -> {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = true
+                            }
+                        },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -104,7 +145,10 @@ fun ImagePreviewDialog(
 
             // Close button
             IconButton(
-                onClick = onDismiss,
+                onClick = {
+                    exoPlayer.stop()
+                    onDismiss()
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp),
