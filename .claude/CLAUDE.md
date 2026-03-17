@@ -49,9 +49,19 @@ The codebase follows a **layered architecture** with clear separation of concern
    - `TransferService.kt` - Foreground Service for background uploads/downloads with progress notifications
    - Uses notification progress and BroadcastReceiver for UI updates
 
-3. **UI Layer** (`ui/`)
+3. **Sync Layer** (`sync/`)
+   - `GalleryScanner.kt` - Reads MediaStore (Images + Videos), returns gallery folders and files
+   - `GallerySyncWorker.kt` - CoroutineWorker: scans gallery, inserts pending files in Room, feeds TransferManager
+   - `GallerySyncScheduler.kt` - WorkManager scheduling: periodic (6h) and immediate sync jobs
+   - `GalleryContentObserver.kt` - ContentObserver for real-time new photo detection (30s debounce)
+   - `db/SyncDatabase.kt` - Room database with `synced_files` table
+   - `db/SyncedFileEntity.kt` - Entity tracking each synced file (mediaStoreId, status, s3Key, etc.)
+   - `db/SyncedFileDao.kt` - DAO with queries for pending, completed, stats (Flow)
+
+4. **UI Layer** (`ui/`)
    - `FileListScreen.kt` - Main screen (~320 lines): file listing, folder navigation, upload/download/delete actions
    - `SettingsScreen.kt` - Configuration screen for AWS credentials
+   - `GallerySyncScreen.kt` - Gallery sync config with ModalBottomSheet folder picker and status card
    - `theme/Theme.kt` - Material 3 theming with Dynamic Colors support (Android 12+)
 
 ### Key Data Flow

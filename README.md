@@ -48,6 +48,20 @@
 | **Thumbnails** | Image thumbnails loaded directly from S3 (via Coil) |
 | **Grid / List mode** | Toggle between grid and list view |
 
+### Gallery Sync
+
+| Feature | Description |
+|---|---|
+| **Automatic backup** | Sync photos and videos from the device gallery to S3 automatically |
+| **Folder selection** | Choose which gallery folders to sync via a BottomSheet picker |
+| **Wi-Fi only mode** | Restrict sync to Wi-Fi connections (default: enabled) |
+| **Periodic sync** | Runs every 6 hours via WorkManager with battery-aware constraints |
+| **Real-time detection** | ContentObserver detects new photos and triggers sync within 30 seconds |
+| **Sync status** | Track total, synced, pending, and failed files with a progress card |
+| **One-way backup** | Deleting from the device does not delete from S3 |
+| **Per-profile config** | Each AWS profile has independent sync settings and bucket |
+| **Custom S3 prefix** | Configurable prefix for the S3 key structure (default: `gallery-sync/`) |
+
 ### Transfers
 
 | Feature | Description |
@@ -102,9 +116,19 @@ com.clouddrive/
 |   |-- SettingsManager.kt        # DataStore: credentials, profiles, encryption settings
 |
 |-- transfer/                      # Transfer queue layer
-|   |-- TransferItem.kt           # Transfer item model (state, progress, type)
+|   |-- TransferItem.kt           # Transfer item model (state, progress, type, source)
 |   |-- TransferManager.kt        # Singleton: queue, semaphore, retry, encryption
 |   |-- RetryPolicy.kt            # Exponential backoff with jitter
+|
+|-- sync/                          # Gallery sync layer
+|   |-- GalleryScanner.kt         # MediaStore queries (images + videos), folder listing
+|   |-- GallerySyncWorker.kt      # CoroutineWorker: scan, diff, feed TransferManager
+|   |-- GallerySyncScheduler.kt   # WorkManager: periodic (6h) and immediate scheduling
+|   |-- GalleryContentObserver.kt # ContentObserver: real-time new photo detection (30s debounce)
+|   |-- db/
+|       |-- SyncDatabase.kt       # Room database (synced_files table)
+|       |-- SyncedFileEntity.kt   # Entity: mediaStoreId, folder, file, status, s3Key
+|       |-- SyncedFileDao.kt      # Queries: getPending, getCompleted, getSyncStats (Flow)
 |
 |-- service/                       # Service layer (Background)
 |   |-- TransferService.kt        # Foreground Service for notifications and background work
@@ -112,6 +136,7 @@ com.clouddrive/
 |-- ui/                            # Presentation layer (Jetpack Compose)
     |-- FileListScreen.kt         # Main screen: file listing, navigation, actions
     |-- SettingsScreen.kt         # AWS config, profiles, biometrics, encryption
+    |-- GallerySyncScreen.kt      # Gallery sync config, folder picker (BottomSheet), status
     |-- TransferQueueScreen.kt    # Transfer queue with progress indicators
     |-- ImagePreviewDialog.kt     # Single image preview with zoom/pan
     |-- ImageGalleryDialog.kt     # Gallery: swipe between images in the folder
@@ -348,6 +373,8 @@ On first launch, fill in your credentials in the Settings screen:
 | **Biometric** | 1.1.0 | Biometric authentication |
 | **Coil** | 2.5.0 | Image and thumbnail loading |
 | **Kotlin Coroutines** | 1.7.3 | Async operations and concurrency |
+| **WorkManager** | 2.9.0 | Periodic and immediate gallery sync scheduling |
+| **Room** | 2.6.1 | Local database for sync tracking (synced files) |
 | **Navigation Compose** | 2.7.6 | Screen navigation |
 | **javax.crypto** | Android built-in | AES-256-GCM encryption |
 | **PdfRenderer** | Android built-in | PDF rendering |
@@ -449,7 +476,7 @@ On first launch, fill in your credentials in the Settings screen:
 ### New features
 
 - [ ] **Upload widget** — send files directly from the Android home screen
-- [ ] **Photo auto-backup** — automatically sync the gallery with S3
+- [x] **Photo auto-backup** — automatically sync the gallery with S3 (WorkManager + Room + ContentObserver)
 - [ ] **Offline mode** — local cache of recently viewed files
 - [ ] **Compress before upload** — reduce image and video size before sending
 - [ ] **Folder sync** — keep a local folder mirrored in S3
