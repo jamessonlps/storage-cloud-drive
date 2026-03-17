@@ -134,6 +134,12 @@ class SettingsManager(context: Context) {
             .remove(profileKey(name, "region"))
             .remove(profileKey(name, "bucket_name"))
             .remove(profileKey(name, "buckets"))
+            .remove(profileKey(name, "gallery_sync_enabled"))
+            .remove(profileKey(name, "gallery_sync_bucket"))
+            .remove(profileKey(name, "gallery_sync_folders"))
+            .remove(profileKey(name, "gallery_sync_prefix"))
+            .remove(profileKey(name, "gallery_sync_wifi_only"))
+            .remove(profileKey(name, "gallery_sync_last_run"))
 
         if (profiles.isEmpty()) {
             editor.remove(KEY_PROFILE_LIST).remove(KEY_CURRENT_PROFILE).apply()
@@ -289,5 +295,63 @@ class SettingsManager(context: Context) {
 
     fun saveEncryptionKey(profileName: String, keyBase64: String) {
         prefs.edit().putString(profileKey(profileName, KEY_ENCRYPTION_KEY), keyBase64).apply()
+    }
+
+    // --- Gallery Sync Settings (per-profile) ---
+
+    fun isGallerySyncEnabled(profileName: String): Boolean {
+        return prefs.getBoolean(profileKey(profileName, "gallery_sync_enabled"), false)
+    }
+
+    fun setGallerySyncEnabled(profileName: String, enabled: Boolean) {
+        prefs.edit().putBoolean(profileKey(profileName, "gallery_sync_enabled"), enabled).apply()
+    }
+
+    fun getGallerySyncBucket(profileName: String): String? {
+        return prefs.getString(profileKey(profileName, "gallery_sync_bucket"), null)
+    }
+
+    fun setGallerySyncBucket(profileName: String, bucketAwsName: String) {
+        prefs.edit().putString(profileKey(profileName, "gallery_sync_bucket"), bucketAwsName).apply()
+    }
+
+    fun getGallerySyncFolders(profileName: String): List<String> {
+        val json = prefs.getString(profileKey(profileName, "gallery_sync_folders"), null) ?: return emptyList()
+        val array = JSONArray(json)
+        return (0 until array.length()).map { array.getString(it) }
+    }
+
+    fun setGallerySyncFolders(profileName: String, folders: List<String>) {
+        val array = JSONArray()
+        folders.forEach { array.put(it) }
+        prefs.edit().putString(profileKey(profileName, "gallery_sync_folders"), array.toString()).apply()
+    }
+
+    fun getGallerySyncPrefix(profileName: String): String {
+        return prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "gallery-sync/"
+    }
+
+    fun setGallerySyncPrefix(profileName: String, prefix: String) {
+        prefs.edit().putString(profileKey(profileName, "gallery_sync_prefix"), prefix).apply()
+    }
+
+    fun isGallerySyncWifiOnly(profileName: String): Boolean {
+        return prefs.getBoolean(profileKey(profileName, "gallery_sync_wifi_only"), true)
+    }
+
+    fun setGallerySyncWifiOnly(profileName: String, wifiOnly: Boolean) {
+        prefs.edit().putBoolean(profileKey(profileName, "gallery_sync_wifi_only"), wifiOnly).apply()
+    }
+
+    fun getGallerySyncLastRun(profileName: String): Long {
+        return prefs.getLong(profileKey(profileName, "gallery_sync_last_run"), 0L)
+    }
+
+    fun setGallerySyncLastRun(profileName: String, timestamp: Long) {
+        prefs.edit().putLong(profileKey(profileName, "gallery_sync_last_run"), timestamp).apply()
+    }
+
+    fun isAnySyncEnabled(): Boolean {
+        return getProfileNames().any { isGallerySyncEnabled(it) }
     }
 }

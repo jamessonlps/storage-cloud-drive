@@ -1,6 +1,7 @@
 package com.clouddrive.ui
 
 import androidx.biometric.BiometricManager
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,9 +16,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.NavigateNext
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -67,6 +70,7 @@ fun SettingsScreen(
     snackbarHostState: SnackbarHostState,
     onSaveSuccess: () -> Unit,
     onThemeModeChanged: (String) -> Unit,
+    onNavigateToGallerySync: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val profiles = remember { settingsManager.getProfileNames() }.toMutableList()
@@ -481,6 +485,47 @@ fun SettingsScreen(
                             EncryptionManager.getOrCreateKey(settingsManager, selectedProfile)
                         }
                     },
+                )
+            }
+        }
+
+        // Gallery Sync shortcut
+        if (selectedProfile.isNotBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Sincronização",
+                style = MaterialTheme.typography.titleMedium,
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToGallerySync)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.CloudSync,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        text = "Sincronização de Galeria",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    val syncStatus = if (settingsManager.isGallerySyncEnabled(selectedProfile)) "Ativa" else "Desativada"
+                    Text(
+                        text = syncStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    Icons.Filled.NavigateNext,
+                    contentDescription = "Abrir sincronização de galeria",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

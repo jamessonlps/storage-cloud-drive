@@ -72,11 +72,12 @@ import com.clouddrive.transfer.TransferType
 import com.clouddrive.service.TransferService
 import com.clouddrive.ui.BucketListScreen
 import com.clouddrive.ui.FileListScreen
+import com.clouddrive.ui.GallerySyncScreen
 import com.clouddrive.ui.SettingsScreen
 import com.clouddrive.ui.TransferQueueScreen
 import com.clouddrive.ui.theme.CloudDriveTheme
 
-enum class Screen { Home, Settings, Transfers }
+enum class Screen { Home, Settings, Transfers, GallerySync }
 
 class MainActivity : FragmentActivity() {
 
@@ -196,6 +197,9 @@ class MainActivity : FragmentActivity() {
                 BackHandler(enabled = currentScreen == Screen.Home && !isSelectionMode && pathStack.isEmpty() && selectedBucket != null) {
                     selectedBucket = null
                 }
+                BackHandler(enabled = currentScreen == Screen.GallerySync) {
+                    currentScreen = Screen.Settings
+                }
                 BackHandler(enabled = currentScreen == Screen.Settings || currentScreen == Screen.Transfers) {
                     currentScreen = Screen.Home
                 }
@@ -255,11 +259,19 @@ class MainActivity : FragmentActivity() {
                                         "Transferências",
                                         style = MaterialTheme.typography.titleMedium,
                                     )
+                                    currentScreen == Screen.GallerySync -> Text(
+                                        "Sincronização de Galeria",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
                                     else -> Text("Configurações AWS S3")
                                 }
                             },
                             navigationIcon = {
-                                if (currentScreen == Screen.Home && isSelectionMode) {
+                                if (currentScreen == Screen.GallerySync) {
+                                    IconButton(onClick = { currentScreen = Screen.Settings }) {
+                                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
+                                    }
+                                } else if (currentScreen == Screen.Home && isSelectionMode) {
                                     IconButton(onClick = { clearSelectionTrigger++ }) {
                                         Icon(Icons.Filled.Close, contentDescription = "Cancelar seleção")
                                     }
@@ -437,8 +449,23 @@ class MainActivity : FragmentActivity() {
                                 snackbarHostState = snackbarHostState,
                                 onSaveSuccess = { currentScreen = Screen.Home },
                                 onThemeModeChanged = { themeMode = it },
+                                onNavigateToGallerySync = { currentScreen = Screen.GallerySync },
                                 modifier = Modifier.padding(padding),
                             )
+                        }
+                        Screen.GallerySync -> {
+                            if (currentProfileName != null) {
+                                val profileBuckets = remember(currentProfileName) {
+                                    settingsManager.getBuckets(currentProfileName!!)
+                                }
+                                GallerySyncScreen(
+                                    settingsManager = settingsManager,
+                                    profileName = currentProfileName!!,
+                                    buckets = profileBuckets,
+                                    snackbarHostState = snackbarHostState,
+                                    modifier = Modifier.padding(padding),
+                                )
+                            }
                         }
                     }
                 }

@@ -10,6 +10,10 @@ enum class TransferType {
     UPLOAD, DOWNLOAD
 }
 
+enum class TransferSource {
+    MANUAL, GALLERY_SYNC
+}
+
 data class TransferItem(
     val id: String = UUID.randomUUID().toString(),
     val batchId: String = UUID.randomUUID().toString(),
@@ -30,6 +34,7 @@ data class TransferItem(
     val contentType: String? = null,
     val prefix: String = "",
     val bucketName: String = "",
+    val source: TransferSource = TransferSource.MANUAL,
 ) {
     val progress: Float
         get() = if (totalBytes > 0) (transferredBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f
