@@ -328,7 +328,7 @@ class SettingsManager(context: Context) {
     }
 
     fun getGallerySyncPrefix(profileName: String): String {
-        return prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "gallery-sync/"
+        return prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "/galeria"
     }
 
     fun setGallerySyncPrefix(profileName: String, prefix: String) {

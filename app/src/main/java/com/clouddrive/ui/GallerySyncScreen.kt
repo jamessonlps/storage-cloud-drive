@@ -26,8 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,6 +41,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -72,6 +75,39 @@ import com.clouddrive.sync.db.SyncStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+@Composable
+private fun InlineHelpIcon(
+    title: String,
+    helpText: String,
+) {
+    var showHelp by remember { mutableStateOf(false) }
+
+    IconButton(
+        onClick = { showHelp = true },
+        modifier = Modifier.size(28.dp),
+    ) {
+        Icon(
+            Icons.Filled.HelpOutline,
+            contentDescription = "Ajuda sobre $title",
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (showHelp) {
+        AlertDialog(
+            onDismissRequest = { showHelp = false },
+            title = { Text(title) },
+            text = { Text(helpText) },
+            confirmButton = {
+                TextButton(onClick = { showHelp = false }) {
+                    Text("Entendi")
+                }
+            },
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -188,10 +224,16 @@ fun GallerySyncScreen(
                 tint = MaterialTheme.colorScheme.primary,
             )
             Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(
-                    text = "Ativar sincronização",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Ativar sincronização",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    InlineHelpIcon(
+                        title = "Sincronização automática",
+                        helpText = "Quando ativada, a sincronização roda automaticamente a cada 6 horas (respeitando a opção de Wi-Fi). Novas fotos são detectadas em tempo real e enviadas em até 30 segundos. A sincronização continua mesmo com o app fechado.",
+                    )
+                }
                 Text(
                     text = "Sincroniza a cada 6 horas automaticamente",
                     style = MaterialTheme.typography.bodySmall,
@@ -224,10 +266,16 @@ fun GallerySyncScreen(
         }
 
         // Bucket selector
-        Text(
-            text = "Bucket de destino",
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Bucket de destino",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            InlineHelpIcon(
+                title = "Bucket de destino",
+                helpText = "Selecione o bucket S3 onde as fotos e vídeos serão enviados. Pode ser o mesmo bucket usado para arquivos manuais ou um bucket separado dedicado ao backup da galeria. Os buckets disponíveis são os cadastrados no perfil atual.",
+            )
+        }
 
         ExposedDropdownMenuBox(
             expanded = bucketExpanded,
@@ -275,17 +323,28 @@ fun GallerySyncScreen(
         }
 
         // S3 Prefix
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Prefixo S3",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            InlineHelpIcon(
+                title = "Prefixo S3",
+                helpText = "O prefixo é a \"pasta raiz\" dentro do bucket onde os arquivos serão salvos. A estrutura final será: prefixo/NomeDaPasta/arquivo.jpg. Por exemplo, com prefixo \"/galeria\": /galeria/Camera/IMG_001.jpg, /galeria/Screenshots/Screenshot_01.png",
+            )
+        }
+
         OutlinedTextField(
             value = s3Prefix,
             onValueChange = { value ->
                 s3Prefix = value
                 settingsManager.setGallerySyncPrefix(profileName, value)
             },
-            label = { Text("Prefixo S3") },
+            label = { Text("Prefixo") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             supportingText = {
-                Text("Exemplo: gallery-sync/Camera/IMG_001.jpg")
+                Text("Exemplo: /galeria/Camera/IMG_001.jpg")
             },
         )
 
@@ -300,10 +359,16 @@ fun GallerySyncScreen(
                 tint = MaterialTheme.colorScheme.primary,
             )
             Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(
-                    text = "Apenas Wi-Fi",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Apenas Wi-Fi",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    InlineHelpIcon(
+                        title = "Apenas Wi-Fi",
+                        helpText = "Quando ativado, a sincronização só acontece em redes Wi-Fi, evitando consumo do plano de dados móveis. Recomendado manter ativado, especialmente para galerias com muitos vídeos.",
+                    )
+                }
                 Text(
                     text = "Sincronizar somente em redes Wi-Fi",
                     style = MaterialTheme.typography.bodySmall,
@@ -329,10 +394,16 @@ fun GallerySyncScreen(
         // Folder selection — summary row + BottomSheet
         var showFolderSheet by remember { mutableStateOf(false) }
 
-        Text(
-            text = "Pastas da galeria",
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Pastas da galeria",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            InlineHelpIcon(
+                title = "Pastas da galeria",
+                helpText = "Selecione quais pastas da galeria do celular serão sincronizadas com o S3. Cada pasta selecionada será replicada como um diretório dentro do prefixo configurado. Apenas fotos e vídeos são incluídos.",
+            )
+        }
 
         if (!hasPermission) {
             Text(

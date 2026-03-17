@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.NavigateNext
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -61,6 +63,48 @@ import kotlinx.coroutines.launch
 private const val MASKED_SECRET = "••••••••••••••••"
 
 private val PAGE_SIZE_OPTIONS = listOf(50, 100, 200, 500)
+
+@Composable
+private fun SectionHeaderWithHelp(
+    title: String,
+    helpText: String,
+) {
+    var showHelp by remember { mutableStateOf(false) }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = { showHelp = true },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                Icons.Filled.HelpOutline,
+                contentDescription = "Ajuda sobre $title",
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (showHelp) {
+        AlertDialog(
+            onDismissRequest = { showHelp = false },
+            title = { Text(title) },
+            text = { Text(helpText) },
+            confirmButton = {
+                TextButton(onClick = { showHelp = false }) {
+                    Text("Entendi")
+                }
+            },
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,9 +225,9 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         // --- Credentials ---
-        Text(
-            text = "Credenciais AWS",
-            style = MaterialTheme.typography.titleMedium,
+        SectionHeaderWithHelp(
+            title = "Credenciais AWS",
+            helpText = "Insira as credenciais IAM da sua conta AWS. Você pode criar um usuário IAM no console AWS (IAM > Users > Create User) e gerar um Access Key ID e Secret Access Key. Essas credenciais são armazenadas de forma criptografada no dispositivo.",
         )
 
         if (hasExistingConfig) {
@@ -232,9 +276,9 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Região",
-            style = MaterialTheme.typography.titleMedium,
+        SectionHeaderWithHelp(
+            title = "Região",
+            helpText = "A região AWS onde seu bucket S3 está localizado (ex: us-east-1, sa-east-1). Escolha a região mais próxima de você para melhor performance. Verifique no console do S3 em qual região o bucket foi criado.",
         )
 
         OutlinedTextField(
@@ -247,9 +291,9 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Buckets",
-            style = MaterialTheme.typography.titleMedium,
+        SectionHeaderWithHelp(
+            title = "Buckets",
+            helpText = "Buckets são os \"contêineres\" de armazenamento do S3. Cada bucket tem um nome único global. Adicione aqui os buckets que deseja acessar com este perfil. O nome AWS deve ser exato; o nome de exibição é como ele aparecerá no app.",
         )
 
         if (buckets.isEmpty()) {
@@ -303,9 +347,9 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Configurações de Listagem",
-            style = MaterialTheme.typography.titleMedium,
+        SectionHeaderWithHelp(
+            title = "Configurações de Listagem",
+            helpText = "Define quantos arquivos são carregados por vez ao navegar pelas pastas do bucket. Valores menores carregam mais rápido, mas exigem mais paginação. Valores maiores mostram mais arquivos de uma vez, mas podem demorar mais em conexões lentas.",
         )
 
         ExposedDropdownMenuBox(
@@ -339,9 +383,9 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Aparencia",
-            style = MaterialTheme.typography.titleMedium,
+        SectionHeaderWithHelp(
+            title = "Aparência",
+            helpText = "Escolha entre tema claro, escuro ou automático (segue a configuração do sistema). Em dispositivos com Android 12+, as cores do app se adaptam automaticamente ao papel de parede.",
         )
 
         ExposedDropdownMenuBox(
@@ -405,9 +449,9 @@ fun SettingsScreen(
         if (canAuthenticate) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Segurança",
-                style = MaterialTheme.typography.titleMedium,
+            SectionHeaderWithHelp(
+                title = "Segurança",
+                helpText = "Configurações de proteção do app e dos seus arquivos. A biometria protege o acesso ao app. A criptografia AES-256-GCM protege o conteúdo dos arquivos antes do envio ao S3 — mesmo que alguém acesse seu bucket, não conseguirá ler os arquivos sem a chave.",
             )
 
             var biometricEnabled by remember { mutableStateOf(settingsManager.isBiometricEnabled()) }
@@ -450,9 +494,9 @@ fun SettingsScreen(
 
             if (!canAuthenticate) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Segurança",
-                    style = MaterialTheme.typography.titleMedium,
+                SectionHeaderWithHelp(
+                    title = "Segurança",
+                    helpText = "A criptografia AES-256-GCM protege o conteúdo dos arquivos antes do envio ao S3. Mesmo que alguém acesse seu bucket, não conseguirá ler os arquivos sem a chave. A chave é gerada automaticamente e armazenada de forma segura no dispositivo.",
                 )
             }
 
@@ -493,9 +537,9 @@ fun SettingsScreen(
         if (selectedProfile.isNotBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Sincronização",
-                style = MaterialTheme.typography.titleMedium,
+            SectionHeaderWithHelp(
+                title = "Sincronização",
+                helpText = "Faça backup automático das fotos e vídeos da galeria do celular para um bucket S3. A sincronização é unidirecional: deletar do celular não remove do S3. Configure pastas, bucket e frequência na tela de sincronização.",
             )
 
             Row(
