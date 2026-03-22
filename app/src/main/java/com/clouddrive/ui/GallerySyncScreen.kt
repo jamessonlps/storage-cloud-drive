@@ -338,8 +338,8 @@ fun GallerySyncScreen(
         OutlinedTextField(
             value = s3Prefix,
             onValueChange = { value ->
-                // Allow typing freely but normalize before saving
-                val cleaned = value.replace(Regex("[^a-zA-Z0-9/_\\-.]"), "")
+                // Allow Unicode letters/digits, slash, dash, underscore, dot; strip control chars
+                val cleaned = value.replace(Regex("[^\\p{L}\\p{N}/_\\-.]"), "")
                 s3Prefix = cleaned
                 settingsManager.setGallerySyncPrefix(profileName, cleaned)
             },
