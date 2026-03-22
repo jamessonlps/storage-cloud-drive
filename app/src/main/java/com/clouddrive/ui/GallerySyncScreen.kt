@@ -338,8 +338,10 @@ fun GallerySyncScreen(
         OutlinedTextField(
             value = s3Prefix,
             onValueChange = { value ->
-                // Allow Unicode letters/digits, slash, dash, underscore, dot; strip control chars
-                val cleaned = value.replace(Regex("[^\\p{L}\\p{N}/_\\-.]"), "")
+                // Strip accents (é→e, ã→a, ç→c) and remove invalid characters
+                val noAccents = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+                    .replace(Regex("\\p{M}"), "")
+                val cleaned = noAccents.replace(Regex("[^a-zA-Z0-9/_\\-.]"), "")
                 s3Prefix = cleaned
                 settingsManager.setGallerySyncPrefix(profileName, cleaned)
             },
