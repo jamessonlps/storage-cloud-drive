@@ -126,6 +126,10 @@ fun FileListScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    // Bulk delete progress state
+    var isDeletingBatch by remember { mutableStateOf(false) }
+    var deleteProgress by remember { mutableStateOf(0) }
+    var deleteTotal by remember { mutableStateOf(0) }
     var previewImageKey by remember { mutableStateOf<S3FileItem?>(null) }
     var previewVideoKey by remember { mutableStateOf<S3FileItem?>(null) }
     var previewAudioKey by remember { mutableStateOf<S3FileItem?>(null) }
@@ -671,6 +675,34 @@ fun FileListScreen(
         )
     }
 
+    // Batch delete progress overlay
+    if (isDeletingBatch) {
+        AlertDialog(
+            onDismissRequest = { /* Cannot dismiss while deleting */ },
+            title = { Text("Excluindo arquivos...") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    if (deleteTotal > 0) {
+                        Text(
+                            "$deleteProgress / $deleteTotal",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { deleteProgress.toFloat() / deleteTotal.toFloat() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text("Buscando itens da pasta...")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
     // Batch delete confirmation dialog
     if (showBatchDeleteDialog) {
         val isAllFolder = allInFolderSelected
@@ -691,25 +723,33 @@ fun FileListScreen(
                         val keysSnapshot = selectedKeys.toList()
                         val deleteAll = isAllFolder
                         showBatchDeleteDialog = false
+                        isDeletingBatch = true
+                        deleteProgress = 0
+                        deleteTotal = 0
                         scope.launch {
                             try {
                                 val keysToDelete = if (deleteAll) {
-                                    Toast.makeText(context, "Buscando todos os itens da pasta...", Toast.LENGTH_SHORT).show()
                                     withContext(Dispatchers.IO) {
                                         repository.listAllKeys(currentPrefix)
                                     }.map { it.key }
                                 } else {
                                     keysSnapshot
                                 }
-                                val totalCount = keysToDelete.size
+                                deleteTotal = keysToDelete.size
                                 withContext(Dispatchers.IO) {
-                                    repository.deleteFiles(keysToDelete)
+                                    repository.deleteFilesWithProgress(keysToDelete) { deleted, total ->
+                                        deleteProgress = deleted
+                                        deleteTotal = total
+                                    }
                                 }
                                 clearSelection()
                                 loadFiles()
+                                val totalCount = keysToDelete.size
                                 Toast.makeText(context, "$totalCount ite${if (totalCount == 1) "m excluido" else "ns excluidos"}", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                isDeletingBatch = false
                             }
                         }
                     },

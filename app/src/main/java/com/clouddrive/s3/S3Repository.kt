@@ -294,6 +294,22 @@ class S3Repository(private val config: S3Config) {
         }
     }
 
+    suspend fun deleteFilesWithProgress(
+        keys: List<String>,
+        batchSize: Int = 10,
+        onProgress: (deleted: Int, total: Int) -> Unit,
+    ) {
+        val total = keys.size
+        var deleted = 0
+        keys.chunked(batchSize).forEach { batch ->
+            coroutineScope {
+                batch.map { key -> async { deleteFile(key) } }.awaitAll()
+            }
+            deleted += batch.size
+            onProgress(deleted, total)
+        }
+    }
+
     /**
      * Lists ALL file/folder keys in a prefix (auto-paginates through all pages).
      * Returns only the immediate children (uses delimiter "/").
