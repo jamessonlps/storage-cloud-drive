@@ -68,6 +68,7 @@ import androidx.core.content.ContextCompat
 import com.clouddrive.CloudDriveApp
 import com.clouddrive.s3.BucketEntry
 import com.clouddrive.s3.SettingsManager
+import com.clouddrive.s3.SettingsManager.Companion.normalizeS3Prefix
 import com.clouddrive.sync.GalleryContentObserver
 import com.clouddrive.sync.GalleryScanner
 import com.clouddrive.sync.GallerySyncScheduler
@@ -330,21 +331,29 @@ fun GallerySyncScreen(
             )
             InlineHelpIcon(
                 title = "Prefixo S3",
-                helpText = "O prefixo é a \"pasta raiz\" dentro do bucket onde os arquivos serão salvos. A estrutura final será: prefixo/NomeDaPasta/arquivo.jpg. Por exemplo, com prefixo \"/galeria\": /galeria/Camera/IMG_001.jpg, /galeria/Screenshots/Screenshot_01.png",
+                helpText = "O prefixo é a \"pasta raiz\" dentro do bucket onde os arquivos serão salvos. A estrutura final será: prefixo/NomeDaPasta/arquivo.jpg. Por exemplo, com prefixo \"galeria\": galeria/Camera/IMG_001.jpg, galeria/Screenshots/Screenshot_01.png. Não use barra no início.",
             )
         }
 
         OutlinedTextField(
             value = s3Prefix,
             onValueChange = { value ->
-                s3Prefix = value
-                settingsManager.setGallerySyncPrefix(profileName, value)
+                // Allow typing freely but normalize before saving
+                val cleaned = value.replace(Regex("[^a-zA-Z0-9/_\\-.]"), "")
+                s3Prefix = cleaned
+                settingsManager.setGallerySyncPrefix(profileName, cleaned)
             },
             label = { Text("Prefixo") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             supportingText = {
-                Text("Exemplo: /galeria/Camera/IMG_001.jpg")
+                val normalized = normalizeS3Prefix(s3Prefix)
+                val preview = if (normalized.isNotEmpty()) {
+                    "${normalized}Camera/IMG_001.jpg"
+                } else {
+                    "Camera/IMG_001.jpg"
+                }
+                Text("Resultado: $preview")
             },
         )
 

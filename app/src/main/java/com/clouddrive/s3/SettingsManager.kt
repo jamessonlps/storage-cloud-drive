@@ -34,6 +34,19 @@ class SettingsManager(context: Context) {
 
         // Profile-prefixed key helpers
         private fun profileKey(profile: String, field: String) = "profile_${profile}_$field"
+
+        /**
+         * Normalizes an S3 prefix: removes leading/trailing slashes, collapses
+         * consecutive slashes, and ensures a single trailing slash if non-empty.
+         * Example: "/galeria/" -> "galeria/", "//foo//bar//" -> "foo/bar/"
+         */
+        fun normalizeS3Prefix(raw: String): String {
+            val trimmed = raw.trim()
+                .replace(Regex("/+"), "/")  // collapse consecutive slashes
+                .trimStart('/')             // never start with /
+                .trimEnd('/')               // remove trailing to re-add uniformly
+            return if (trimmed.isEmpty()) "" else "$trimmed/"
+        }
     }
 
     private val masterKey = MasterKey.Builder(context)
@@ -328,11 +341,13 @@ class SettingsManager(context: Context) {
     }
 
     fun getGallerySyncPrefix(profileName: String): String {
-        return prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "/galeria"
+        val raw = prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "galeria"
+        return normalizeS3Prefix(raw)
     }
 
     fun setGallerySyncPrefix(profileName: String, prefix: String) {
-        prefs.edit().putString(profileKey(profileName, "gallery_sync_prefix"), prefix).apply()
+        val normalized = normalizeS3Prefix(prefix)
+        prefs.edit().putString(profileKey(profileName, "gallery_sync_prefix"), normalized).apply()
     }
 
     fun isGallerySyncWifiOnly(profileName: String): Boolean {

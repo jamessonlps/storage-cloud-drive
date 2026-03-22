@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
+import com.clouddrive.s3.SettingsManager
 import com.clouddrive.sync.db.SyncDatabase
 import com.clouddrive.sync.db.SyncStatus
 import com.clouddrive.sync.db.SyncedFileEntity
@@ -58,6 +59,7 @@ object GalleryScanner {
         val dao = db.syncedFileDao()
         val tracked = dao.getTrackedMediaStoreIds(profileName, bucket).toSet()
         val newFiles = mutableListOf<SyncedFileEntity>()
+        val normalizedPrefix = SettingsManager.normalizeS3Prefix(s3Prefix)
 
         val collector = { info: MediaFileInfo ->
             if (info.mediaStoreId !in tracked && info.folderName in enabledFolders) {
@@ -70,7 +72,7 @@ object GalleryScanner {
                         fileSize = info.fileSize,
                         dateModified = info.dateModified,
                         mimeType = info.mimeType,
-                        s3Key = "${s3Prefix}${info.folderName}/${info.fileName}",
+                        s3Key = "${normalizedPrefix}${info.folderName}/${info.fileName}",
                         s3Bucket = bucket,
                         profileName = profileName,
                         syncStatus = SyncStatus.PENDING,
