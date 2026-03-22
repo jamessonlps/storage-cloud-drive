@@ -294,6 +294,21 @@ class S3Repository(private val config: S3Config) {
         }
     }
 
+    /**
+     * Lists ALL file/folder keys in a prefix (auto-paginates through all pages).
+     * Returns only the immediate children (uses delimiter "/").
+     */
+    suspend fun listAllKeys(prefix: String = ""): List<S3FileItem> {
+        val allItems = mutableListOf<S3FileItem>()
+        var token: String? = null
+        do {
+            val result = listFilesPaged(prefix, maxKeys = 1000, continuationToken = token)
+            allItems.addAll(result.items)
+            token = result.nextToken
+        } while (token != null)
+        return allItems
+    }
+
     suspend fun createFolder(prefix: String) {
         val folderKey = if (prefix.endsWith("/")) prefix else "$prefix/"
         val request = PutObjectRequest {

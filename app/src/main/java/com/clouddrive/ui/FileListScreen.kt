@@ -136,13 +136,27 @@ fun FileListScreen(
     // Selection mode state
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedKeys = remember { mutableStateListOf<String>() }
+    // When true, the user wants to operate on ALL items in the folder (even unpaginated ones)
+    var allInFolderSelected by remember { mutableStateOf(false) }
+    // Show the "select all in folder" banner after selectAll() when hasMore
+    var showSelectAllBanner by remember { mutableStateOf(false) }
 
     fun notifySelectionChanged() {
-        val hasFolder = selectedKeys.any { key -> files.any { it.key == key && it.isFolder } }
+        val hasFolder = if (allInFolderSelected) {
+            // When all-in-folder is selected, we may have folders
+            files.any { it.isFolder }
+        } else {
+            selectedKeys.any { key -> files.any { it.key == key && it.isFolder } }
+        }
         onSelectionChanged(isSelectionMode, selectedKeys.size, hasFolder)
     }
 
     fun toggleSelection(key: String) {
+        // If user manually deselects while allInFolderSelected, exit that mode
+        if (allInFolderSelected) {
+            allInFolderSelected = false
+            showSelectAllBanner = false
+        }
         if (selectedKeys.contains(key)) selectedKeys.remove(key) else selectedKeys.add(key)
         if (selectedKeys.isEmpty()) {
             isSelectionMode = false
@@ -153,10 +167,24 @@ fun FileListScreen(
     fun clearSelection() {
         selectedKeys.clear()
         isSelectionMode = false
+        allInFolderSelected = false
+        showSelectAllBanner = false
         notifySelectionChanged()
     }
 
     fun selectAll() {
+        selectedKeys.clear()
+        selectedKeys.addAll(files.map { it.key })
+        allInFolderSelected = false
+        // Show banner if there are more items beyond what's loaded
+        showSelectAllBanner = hasMore
+        notifySelectionChanged()
+    }
+
+    fun selectAllInFolder() {
+        allInFolderSelected = true
+        showSelectAllBanner = false
+        // Select all currently loaded items visually
         selectedKeys.clear()
         selectedKeys.addAll(files.map { it.key })
         notifySelectionChanged()
@@ -172,30 +200,44 @@ fun FileListScreen(
     }
 
     LaunchedEffect(deleteSelectedTrigger) {
-        if (deleteSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
+        if (deleteSelectedTrigger > 0 && (selectedKeys.isNotEmpty() || allInFolderSelected)) {
             showBatchDeleteDialog = true
         }
     }
 
     LaunchedEffect(downloadSelectedTrigger) {
-        if (downloadSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
-            val filesToDownload = files.filter { it.key in selectedKeys && !it.isFolder }
-            if (filesToDownload.isNotEmpty()) {
-                val batchId = java.util.UUID.randomUUID().toString()
-                val items = filesToDownload.map { file ->
-                    TransferItem(
-                        batchId = batchId,
-                        fileName = file.fileName,
-                        s3Key = file.key,
-                        type = TransferType.DOWNLOAD,
-                        totalBytes = file.size,
-                        bucketName = config.bucketName,
-                    )
+        if (downloadSelectedTrigger > 0 && (selectedKeys.isNotEmpty() || allInFolderSelected)) {
+            scope.launch {
+                try {
+                    val filesToDownload = if (allInFolderSelected) {
+                        Toast.makeText(context, "Buscando todos os arquivos da pasta...", Toast.LENGTH_SHORT).show()
+                        val allItems = withContext(Dispatchers.IO) {
+                            repository.listAllKeys(currentPrefix)
+                        }
+                        allItems.filter { !it.isFolder }
+                    } else {
+                        files.filter { it.key in selectedKeys && !it.isFolder }
+                    }
+                    if (filesToDownload.isNotEmpty()) {
+                        val batchId = java.util.UUID.randomUUID().toString()
+                        val items = filesToDownload.map { file ->
+                            TransferItem(
+                                batchId = batchId,
+                                fileName = file.fileName,
+                                s3Key = file.key,
+                                type = TransferType.DOWNLOAD,
+                                totalBytes = file.size,
+                                bucketName = config.bucketName,
+                            )
+                        }
+                        TransferManager.enqueueBatch(items, config, context, settingsManager, profileName)
+                        Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-                TransferManager.enqueueBatch(items, config, context, settingsManager, profileName)
-                Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+                clearSelection()
             }
-            clearSelection()
         }
     }
 
@@ -367,6 +409,57 @@ fun FileListScreen(
                 }
             }
             else -> {
+                // Banner: "Select all items in folder" (shown after selectAll when hasMore)
+                if (showSelectAllBanner && isSelectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Todos os ${files.size} itens carregados foram selecionados.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        TextButton(onClick = { selectAllInFolder() }) {
+                            Text(
+                                "Selecionar tudo na pasta",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
+                if (allInFolderSelected && isSelectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Todos os itens desta pasta estao selecionados.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        TextButton(onClick = {
+                            allInFolderSelected = false
+                            showSelectAllBanner = true
+                            notifySelectionChanged()
+                        }) {
+                            Text(
+                                "Limpar selecao",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
                 if (isGridView) {
                     val gridState = rememberLazyGridState()
                     val shouldLoadMoreGrid by remember {
@@ -580,24 +673,41 @@ fun FileListScreen(
 
     // Batch delete confirmation dialog
     if (showBatchDeleteDialog) {
+        val isAllFolder = allInFolderSelected
         val count = selectedKeys.size
+        val dialogTitle = if (isAllFolder) "Excluir todos os itens" else "Excluir $count ite${if (count == 1) "m" else "ns"}"
+        val dialogText = if (isAllFolder) {
+            "Deseja excluir TODOS os itens desta pasta (incluindo os nao carregados)? Esta acao nao pode ser desfeita."
+        } else {
+            "Deseja excluir os $count itens selecionados? Esta acao nao pode ser desfeita."
+        }
         AlertDialog(
             onDismissRequest = { showBatchDeleteDialog = false },
-            title = { Text("Excluir $count ite${if (count == 1) "m" else "ns"}") },
-            text = { Text("Deseja excluir os $count itens selecionados? Esta ação não pode ser desfeita.") },
+            title = { Text(dialogTitle) },
+            text = { Text(dialogText) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val keysToDelete = selectedKeys.toList()
+                        val keysSnapshot = selectedKeys.toList()
+                        val deleteAll = isAllFolder
                         showBatchDeleteDialog = false
                         scope.launch {
                             try {
+                                val keysToDelete = if (deleteAll) {
+                                    Toast.makeText(context, "Buscando todos os itens da pasta...", Toast.LENGTH_SHORT).show()
+                                    withContext(Dispatchers.IO) {
+                                        repository.listAllKeys(currentPrefix)
+                                    }.map { it.key }
+                                } else {
+                                    keysSnapshot
+                                }
+                                val totalCount = keysToDelete.size
                                 withContext(Dispatchers.IO) {
                                     repository.deleteFiles(keysToDelete)
                                 }
                                 clearSelection()
                                 loadFiles()
-                                Toast.makeText(context, "$count ite${if (count == 1) "m excluído" else "ns excluídos"}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "$totalCount ite${if (totalCount == 1) "m excluido" else "ns excluidos"}", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
                             }
