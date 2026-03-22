@@ -14,9 +14,6 @@ import aws.sdk.kotlin.services.s3.model.PutObjectRequest
 import aws.sdk.kotlin.services.s3.model.UploadPartRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import java.io.File
 import java.io.InputStream
 import java.text.DecimalFormat
@@ -286,28 +283,6 @@ class S3Repository(private val config: S3Config) {
             this.key = key
         }
         client.deleteObject(request)
-    }
-
-    suspend fun deleteFiles(keys: List<String>) {
-        coroutineScope {
-            keys.map { key -> async { deleteFile(key) } }.awaitAll()
-        }
-    }
-
-    suspend fun deleteFilesWithProgress(
-        keys: List<String>,
-        batchSize: Int = 10,
-        onProgress: (deleted: Int, total: Int) -> Unit,
-    ) {
-        val total = keys.size
-        var deleted = 0
-        keys.chunked(batchSize).forEach { batch ->
-            coroutineScope {
-                batch.map { key -> async { deleteFile(key) } }.awaitAll()
-            }
-            deleted += batch.size
-            onProgress(deleted, total)
-        }
     }
 
     /**

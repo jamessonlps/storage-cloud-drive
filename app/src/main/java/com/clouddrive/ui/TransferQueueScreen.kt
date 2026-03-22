@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
@@ -85,7 +86,7 @@ private data class BatchGroup(
         }
 
     val currentFile: TransferItem?
-        get() = items.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING) }
+        get() = items.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING) }
 }
 
 @Composable
@@ -305,7 +306,7 @@ private fun BatchCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 if (batch.isSingleFile) {
                     val item = batch.items.first()
-                    if (item.totalBytes > 0 && item.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING)) {
+                    if (item.totalBytes > 0 && item.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING)) {
                         LinearProgressIndicator(
                             progress = item.progress,
                             modifier = Modifier.fillMaxWidth(),
@@ -361,7 +362,11 @@ private fun BatchCard(
 }
 
 private fun getBatchTitle(batch: BatchGroup): String {
-    val typeLabel = if (batch.type == TransferType.UPLOAD) "Upload" else "Download"
+    val typeLabel = when (batch.type) {
+        TransferType.UPLOAD -> "Upload"
+        TransferType.DOWNLOAD -> "Download"
+        TransferType.DELETE -> "Exclusão"
+    }
     return if (batch.isSingleFile) {
         batch.items.first().fileName
     } else {
@@ -370,7 +375,11 @@ private fun getBatchTitle(batch: BatchGroup): String {
 }
 
 private fun getBatchSubtitle(batch: BatchGroup): String {
-    val typeLabel = if (batch.type == TransferType.UPLOAD) "Upload" else "Download"
+    val typeLabel = when (batch.type) {
+        TransferType.UPLOAD -> "Upload"
+        TransferType.DOWNLOAD -> "Download"
+        TransferType.DELETE -> "Exclusão"
+    }
     return when (batch.state) {
         BatchState.ACTIVE -> {
             if (batch.isSingleFile) {
@@ -381,6 +390,7 @@ private fun getBatchSubtitle(batch: BatchGroup): String {
                         val percent = (item.progress * 100).toInt()
                         "$typeLabel: $percent%"
                     }
+                    TransferState.DELETING -> "Excluindo..."
                     TransferState.RETRYING -> "Retentando (${item.retryCount}/${item.maxRetries})..."
                     else -> "$typeLabel em andamento"
                 }
@@ -411,7 +421,11 @@ private fun getBatchIcon(batch: BatchGroup): ImageVector {
     if (batch.isSingleFile) {
         return getFileExtIcon(batch.items.first().fileName, batch.type)
     }
-    return if (batch.type == TransferType.UPLOAD) Icons.Filled.CloudUpload else Icons.Filled.CloudDownload
+    return when (batch.type) {
+        TransferType.UPLOAD -> Icons.Filled.CloudUpload
+        TransferType.DOWNLOAD -> Icons.Filled.CloudDownload
+        TransferType.DELETE -> Icons.Filled.Delete
+    }
 }
 
 private fun getBatchIconColor(batch: BatchGroup): Color {
@@ -421,7 +435,7 @@ private fun getBatchIconColor(batch: BatchGroup): Color {
     if (batch.isSingleFile) {
         return getFileExtColor(batch.items.first().fileName)
     }
-    return Color(0xFF1E88E5)
+    return if (batch.type == TransferType.DELETE) Color(0xFFE53935) else Color(0xFF1E88E5)
 }
 
 private fun getFileExtIcon(fileName: String, type: TransferType): ImageVector {
@@ -445,8 +459,10 @@ private fun getFileExtIcon(fileName: String, type: TransferType): ImageVector {
         "zip", "rar", "7z", "tar", "gz", "bz2",
         "xz", "tgz", "zst" -> Icons.Filled.FolderZip
         "apk" -> Icons.Filled.Android
-        else -> {
-            if (type == TransferType.UPLOAD) Icons.Filled.CloudUpload else Icons.Filled.CloudDownload
+        else -> when (type) {
+            TransferType.UPLOAD -> Icons.Filled.CloudUpload
+            TransferType.DOWNLOAD -> Icons.Filled.CloudDownload
+            TransferType.DELETE -> Icons.Filled.Delete
         }
     }
 }

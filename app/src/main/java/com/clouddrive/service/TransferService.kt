@@ -140,8 +140,11 @@ class TransferService : Service() {
     private fun buildBatchNotification(batchItems: List<TransferItem>): Notification {
         val total = batchItems.size
         val completed = batchItems.count { it.state == TransferState.COMPLETED }
-        val isUpload = batchItems.first().type == TransferType.UPLOAD
-        val typeLabel = if (isUpload) "Enviando" else "Baixando"
+        val typeLabel = when (batchItems.first().type) {
+            TransferType.UPLOAD -> "Enviando"
+            TransferType.DOWNLOAD -> "Baixando"
+            TransferType.DELETE -> "Excluindo"
+        }
         val isPaused = batchItems.all { it.state in setOf(TransferState.PAUSED, TransferState.COMPLETED, TransferState.FAILED) }
             && batchItems.any { it.state == TransferState.PAUSED }
 
@@ -153,10 +156,14 @@ class TransferService : Service() {
             "$typeLabel $completed de $total arquivos"
         }
 
-        val currentFile = batchItems.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING) }
+        val currentFile = batchItems.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING) }
         val subtitle = currentFile?.fileName
 
-        val icon = if (isUpload) android.R.drawable.stat_sys_upload else android.R.drawable.stat_sys_download
+        val icon = when (batchItems.first().type) {
+            TransferType.UPLOAD -> android.R.drawable.stat_sys_upload
+            TransferType.DOWNLOAD -> android.R.drawable.stat_sys_download
+            TransferType.DELETE -> android.R.drawable.ic_menu_delete
+        }
 
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -195,20 +202,28 @@ class TransferService : Service() {
         val total = batchItems.size
         val succeeded = batchItems.count { it.state == TransferState.COMPLETED }
         val failed = batchItems.count { it.state == TransferState.FAILED }
-        val isUpload = batchItems.first().type == TransferType.UPLOAD
+        val typeLabel = when (batchItems.first().type) {
+            TransferType.UPLOAD -> "Upload"
+            TransferType.DOWNLOAD -> "Download"
+            TransferType.DELETE -> "Exclusão"
+        }
 
         val title: String
         val text: String
 
         if (failed == 0) {
-            title = if (isUpload) "Upload concluído" else "Download concluído"
+            title = "$typeLabel concluído"
             text = if (total == 1) {
                 batchItems.first().fileName
             } else {
-                "$total arquivos enviados com sucesso"
+                if (batchItems.first().type == TransferType.DELETE) {
+                    "$total arquivos excluídos com sucesso"
+                } else {
+                    "$total arquivos enviados com sucesso"
+                }
             }
         } else {
-            title = if (isUpload) "Upload parcial" else "Download parcial"
+            title = "$typeLabel parcial"
             text = "$succeeded de $total concluídos ($failed falharam)"
         }
 

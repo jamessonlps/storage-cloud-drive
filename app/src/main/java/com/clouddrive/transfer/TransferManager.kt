@@ -224,6 +224,7 @@ object TransferManager {
                 when (item.type) {
                     TransferType.UPLOAD -> executeUpload(item, effectiveConfig, context, settingsManager, profileName)
                     TransferType.DOWNLOAD -> executeDownload(item, effectiveConfig, context, settingsManager, profileName)
+                    TransferType.DELETE -> executeDelete(item, effectiveConfig)
                 }
             } catch (e: CancellationException) {
                 val current = _transfers.value.find { it.id == item.id }
@@ -411,6 +412,40 @@ object TransferManager {
                 }
 
                 updateProgress(item.id, item.totalBytes)
+                updateState(item.id, TransferState.COMPLETED)
+                return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (RetryPolicy.shouldRetry(e, currentRetry)) {
+                    currentRetry++
+                    _transfers.value = _transfers.value.map {
+                        if (it.id == item.id) it.copy(
+                            retryCount = currentRetry,
+                            state = TransferState.RETRYING,
+                            errorMessage = "Tentativa $currentRetry de ${item.maxRetries}",
+                        ) else it
+                    }
+                    delay(RetryPolicy.delayMs(currentRetry))
+                } else {
+                    updateState(item.id, TransferState.FAILED, e.message ?: "Erro desconhecido")
+                    return
+                }
+            }
+        }
+    }
+
+    private suspend fun executeDelete(
+        item: TransferItem,
+        config: S3Config,
+    ) {
+        val repository = S3Repository(config)
+        var currentRetry = 0
+
+        while (true) {
+            try {
+                updateState(item.id, TransferState.DELETING)
+                repository.deleteFile(item.s3Key)
                 updateState(item.id, TransferState.COMPLETED)
                 return
             } catch (e: CancellationException) {

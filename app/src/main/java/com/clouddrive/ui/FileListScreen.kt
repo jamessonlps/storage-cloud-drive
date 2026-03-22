@@ -126,10 +126,6 @@ fun FileListScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
-    // Bulk delete progress state
-    var isDeletingBatch by remember { mutableStateOf(false) }
-    var deleteProgress by remember { mutableStateOf(0) }
-    var deleteTotal by remember { mutableStateOf(0) }
     var previewImageKey by remember { mutableStateOf<S3FileItem?>(null) }
     var previewVideoKey by remember { mutableStateOf<S3FileItem?>(null) }
     var previewAudioKey by remember { mutableStateOf<S3FileItem?>(null) }
@@ -650,18 +646,16 @@ fun FileListScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch {
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    repository.deleteFile(file.key)
-                                }
-                                showDeleteDialog = null
-                                loadFiles()
-                                Toast.makeText(context, "Arquivo excluído", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
-                        }
+                        val item = TransferItem(
+                            fileName = file.fileName,
+                            s3Key = file.key,
+                            type = TransferType.DELETE,
+                            prefix = currentPrefix,
+                            bucketName = config.bucketName,
+                        )
+                        TransferManager.enqueue(item, config, context, settingsManager, profileName)
+                        showDeleteDialog = null
+                        Toast.makeText(context, "Exclusão iniciada: ${file.fileName}", Toast.LENGTH_SHORT).show()
                     },
                 ) {
                     Text("Excluir", color = MaterialTheme.colorScheme.error)
@@ -672,34 +666,6 @@ fun FileListScreen(
                     Text("Cancelar")
                 }
             },
-        )
-    }
-
-    // Batch delete progress overlay
-    if (isDeletingBatch) {
-        AlertDialog(
-            onDismissRequest = { /* Cannot dismiss while deleting */ },
-            title = { Text("Excluindo arquivos...") },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    if (deleteTotal > 0) {
-                        Text(
-                            "$deleteProgress / $deleteTotal",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { deleteProgress.toFloat() / deleteTotal.toFloat() },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        Text("Buscando itens da pasta...")
-                        Spacer(modifier = Modifier.height(12.dp))
-                        androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            },
-            confirmButton = {},
         )
     }
 
@@ -723,34 +689,35 @@ fun FileListScreen(
                         val keysSnapshot = selectedKeys.toList()
                         val deleteAll = isAllFolder
                         showBatchDeleteDialog = false
-                        isDeletingBatch = true
-                        deleteProgress = 0
-                        deleteTotal = 0
                         scope.launch {
                             try {
                                 val keysToDelete = if (deleteAll) {
+                                    Toast.makeText(context, "Buscando todos os arquivos da pasta...", Toast.LENGTH_SHORT).show()
                                     withContext(Dispatchers.IO) {
                                         repository.listAllKeys(currentPrefix)
                                     }.map { it.key }
                                 } else {
                                     keysSnapshot
                                 }
-                                deleteTotal = keysToDelete.size
-                                withContext(Dispatchers.IO) {
-                                    repository.deleteFilesWithProgress(keysToDelete) { deleted, total ->
-                                        deleteProgress = deleted
-                                        deleteTotal = total
+                                if (keysToDelete.isNotEmpty()) {
+                                    val batchId = java.util.UUID.randomUUID().toString()
+                                    val items = keysToDelete.map { key ->
+                                        TransferItem(
+                                            batchId = batchId,
+                                            fileName = key.trimEnd('/').substringAfterLast('/'),
+                                            s3Key = key,
+                                            type = TransferType.DELETE,
+                                            prefix = currentPrefix,
+                                            bucketName = config.bucketName,
+                                        )
                                     }
+                                    TransferManager.enqueueBatch(items, config, context, settingsManager, profileName)
+                                    Toast.makeText(context, "Exclusão iniciada: ${keysToDelete.size} arquivo(s)", Toast.LENGTH_SHORT).show()
                                 }
-                                clearSelection()
-                                loadFiles()
-                                val totalCount = keysToDelete.size
-                                Toast.makeText(context, "$totalCount ite${if (totalCount == 1) "m excluido" else "ns excluidos"}", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
-                            } finally {
-                                isDeletingBatch = false
                             }
+                            clearSelection()
                         }
                     },
                 ) {
