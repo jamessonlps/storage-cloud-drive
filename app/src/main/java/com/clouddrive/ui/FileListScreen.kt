@@ -675,9 +675,9 @@ fun FileListScreen(
         val count = selectedKeys.size
         val dialogTitle = if (isAllFolder) "Excluir todos os itens" else "Excluir $count ite${if (count == 1) "m" else "ns"}"
         val dialogText = if (isAllFolder) {
-            "Deseja excluir TODOS os itens desta pasta (incluindo os nao carregados)? Esta acao nao pode ser desfeita."
+            "Deseja excluir TODOS os itens desta pasta (incluindo os não carregados)? Esta ação não pode ser desfeita."
         } else {
-            "Deseja excluir os $count itens selecionados? Esta acao nao pode ser desfeita."
+            "Deseja excluir os $count itens selecionados? Esta ação não pode ser desfeita."
         }
         AlertDialog(
             onDismissRequest = { showBatchDeleteDialog = false },

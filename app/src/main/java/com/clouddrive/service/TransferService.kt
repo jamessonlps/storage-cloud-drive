@@ -212,14 +212,14 @@ class TransferService : Service() {
         val text: String
 
         if (failed == 0) {
-            title = "$typeLabel concluído"
+            title = if (batchItems.first().type == TransferType.DELETE) "$typeLabel concluída" else "$typeLabel concluído"
             text = if (total == 1) {
                 batchItems.first().fileName
             } else {
-                if (batchItems.first().type == TransferType.DELETE) {
-                    "$total arquivos excluídos com sucesso"
-                } else {
-                    "$total arquivos enviados com sucesso"
+                when (batchItems.first().type) {
+                    TransferType.UPLOAD -> "$total arquivos enviados com sucesso"
+                    TransferType.DOWNLOAD -> "$total arquivos baixados com sucesso"
+                    TransferType.DELETE -> "$total arquivos excluídos com sucesso"
                 }
             }
         } else {
@@ -238,8 +238,12 @@ class TransferService : Service() {
 
         val notif = NotificationCompat.Builder(this, COMPLETE_CHANNEL_ID)
             .setSmallIcon(
-                if (failed == 0) android.R.drawable.stat_sys_upload_done
-                else android.R.drawable.stat_notify_error,
+                if (failed > 0) android.R.drawable.stat_notify_error
+                else when (batchItems.first().type) {
+                    TransferType.UPLOAD -> android.R.drawable.stat_sys_upload_done
+                    TransferType.DOWNLOAD -> android.R.drawable.stat_sys_download_done
+                    TransferType.DELETE -> android.R.drawable.ic_menu_delete
+                },
             )
             .setContentTitle(title)
             .setContentText(text)

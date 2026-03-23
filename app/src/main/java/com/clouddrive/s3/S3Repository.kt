@@ -241,7 +241,7 @@ class S3Repository(private val config: S3Config) {
         client.getObject(request) { response ->
             result = response.body?.toByteArray()
         }
-        return result ?: throw Exception("Arquivo vazio ou nao encontrado")
+        return result ?: throw Exception("Arquivo vazio ou não encontrado")
     }
 
     suspend fun downloadFile(key: String, destinationFile: File) {

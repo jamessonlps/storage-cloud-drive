@@ -403,14 +403,15 @@ private fun getBatchSubtitle(batch: BatchGroup): String {
             else "Pausado - ${batch.completedCount} de ${batch.total} concluídos"
         }
         BatchState.COMPLETED -> {
-            if (batch.isSingleFile) "$typeLabel concluído"
-            else "${batch.total} de ${batch.total} concluídos"
+            if (batch.isSingleFile) {
+                if (batch.type == TransferType.DELETE) "$typeLabel concluída" else "$typeLabel concluído"
+            } else "${batch.total} de ${batch.total} concluídos"
         }
         BatchState.HAS_FAILURES -> {
             if (batch.isSingleFile) "$typeLabel falhou"
             else "${batch.completedCount} de ${batch.total} concluídos, ${batch.failedCount} falharam"
         }
-        BatchState.CANCELLED -> "$typeLabel cancelado"
+        BatchState.CANCELLED -> if (batch.type == TransferType.DELETE) "$typeLabel cancelada" else "$typeLabel cancelado"
     }
 }
 

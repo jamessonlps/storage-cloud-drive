@@ -286,7 +286,7 @@ object TransferManager {
 
                 val uri = Uri.parse(item.sourceUri)
                 val rawStream = context.contentResolver.openInputStream(uri)
-                    ?: throw Exception("Nao foi possivel ler o arquivo")
+                    ?: throw Exception("Não foi possível ler o arquivo")
 
                 rawStream.use { stream ->
                     if (encryptionEnabled) {
