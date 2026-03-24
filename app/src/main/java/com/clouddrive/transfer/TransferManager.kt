@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import java.io.File
@@ -28,7 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 object TransferManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val semaphore = Semaphore(3)
+    private val transferSemaphore = Semaphore(3)
+    private val deleteSemaphore = Semaphore(15)
     private val jobs = ConcurrentHashMap<String, Job>()
 
     private val _transfers = MutableStateFlow<List<TransferItem>>(emptyList())
@@ -51,7 +53,7 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
-        _transfers.value = _transfers.value + item
+        _transfers.update { it + item }
         persistUri(item, context)
         TransferService.ensureRunning(context)
         launchItem(item, config, context, settingsManager, profileName)
@@ -66,7 +68,7 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
-        _transfers.value = _transfers.value + items
+        _transfers.update { it + items }
         items.forEach { persistUri(it, context) }
         TransferService.ensureRunning(context)
         items.forEach { launchItem(it, config, context, settingsManager, profileName) }
@@ -78,11 +80,11 @@ object TransferManager {
             .filter { it.batchId == batchId && it.isActive }
             .map { it.id }
             .toSet()
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.id in activeIds) {
                 it.copy(state = TransferState.PAUSED)
             } else it
-        }
+        } }
         // Then cancel jobs - CancellationException handler will see PAUSED state
         for (id in activeIds) {
             jobs[id]?.cancel()
@@ -97,11 +99,11 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.batchId == batchId && it.state == TransferState.PAUSED) {
                 it.copy(state = TransferState.QUEUED, transferredBytes = 0, completedParts = 0)
             } else it
-        }
+        } }
         TransferService.ensureRunning(context)
         val resumedItems = _transfers.value.filter { it.batchId == batchId && it.state == TransferState.QUEUED }
         resumedItems.forEach { launchItem(it, config, context, settingsManager, profileName) }
@@ -115,11 +117,11 @@ object TransferManager {
                 jobs.remove(item.id)
             }
         }
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.batchId == batchId && (it.isActive || it.state == TransferState.PAUSED)) {
                 it.copy(state = TransferState.CANCELLED)
             } else it
-        }
+        } }
     }
 
     fun retryFailedInBatch(
@@ -129,7 +131,7 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.batchId == batchId && it.state == TransferState.FAILED) {
                 it.copy(
                     state = TransferState.QUEUED,
@@ -139,7 +141,7 @@ object TransferManager {
                     retryCount = 0,
                 )
             } else it
-        }
+        } }
         TransferService.ensureRunning(context)
         val retryItems = _transfers.value.filter { it.batchId == batchId && it.state == TransferState.QUEUED }
         retryItems.forEach { launchItem(it, config, context, settingsManager, profileName) }
@@ -151,7 +153,7 @@ object TransferManager {
             jobs[item.id]?.cancel()
             jobs.remove(item.id)
         }
-        _transfers.value = _transfers.value.filter { it.batchId != batchId }
+        _transfers.update { list -> list.filter { it.batchId != batchId } }
     }
 
     // --- Existing single-item operations ---
@@ -171,7 +173,7 @@ object TransferManager {
             errorMessage = null,
             retryCount = 0,
         )
-        _transfers.value = _transfers.value.map { if (it.id == id) retryItem else it }
+        _transfers.update { list -> list.map { if (it.id == id) retryItem else it } }
         TransferService.ensureRunning(context)
         launchItem(retryItem, config, context)
     }
@@ -179,13 +181,13 @@ object TransferManager {
     fun remove(id: String) {
         jobs[id]?.cancel()
         jobs.remove(id)
-        _transfers.value = _transfers.value.filter { it.id != id }
+        _transfers.update { list -> list.filter { it.id != id } }
     }
 
     fun clearCompleted() {
-        _transfers.value = _transfers.value.filter {
+        _transfers.update { list -> list.filter {
             it.state != TransferState.COMPLETED && it.state != TransferState.CANCELLED
-        }
+        } }
     }
 
     fun cancelGallerySyncTransfers() {
@@ -194,7 +196,7 @@ object TransferManager {
             jobs[item.id]?.cancel()
             jobs.remove(item.id)
         }
-        _transfers.value = _transfers.value.filter { it.source != TransferSource.GALLERY_SYNC }
+        _transfers.update { list -> list.filter { it.source != TransferSource.GALLERY_SYNC } }
     }
 
     // --- Helpers ---
@@ -219,8 +221,9 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
+        val sem = if (item.type == TransferType.DELETE) deleteSemaphore else transferSemaphore
         val job = scope.launch {
-            semaphore.acquire()
+            sem.acquire()
             try {
                 // Check if item was paused/cancelled while waiting for semaphore
                 val current = _transfers.value.find { it.id == item.id }
@@ -233,6 +236,7 @@ object TransferManager {
                 when (item.type) {
                     TransferType.UPLOAD -> executeUpload(item, effectiveConfig, context, settingsManager, profileName)
                     TransferType.DOWNLOAD -> executeDownload(item, effectiveConfig, context, settingsManager, profileName)
+                    TransferType.DELETE -> executeDelete(item, effectiveConfig)
                 }
             } catch (e: CancellationException) {
                 val current = _transfers.value.find { it.id == item.id }
@@ -240,7 +244,7 @@ object TransferManager {
                     updateState(item.id, TransferState.CANCELLED)
                 }
             } finally {
-                semaphore.release()
+                sem.release()
                 jobs.remove(item.id)
                 context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE))
             }
@@ -249,7 +253,7 @@ object TransferManager {
     }
 
     private fun updateState(id: String, state: TransferState, error: String? = null) {
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.id == id) {
                 it.copy(
                     state = state,
@@ -257,22 +261,22 @@ object TransferManager {
                     completedAt = if (state == TransferState.COMPLETED) System.currentTimeMillis() else it.completedAt,
                 )
             } else it
-        }
+        } }
     }
 
     private fun updateProgress(id: String, transferredBytes: Long) {
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.id == id) it.copy(transferredBytes = transferredBytes) else it
-        }
+        } }
     }
 
     private fun updateMultipartProgress(id: String, completedParts: Int, transferredBytes: Long) {
-        _transfers.value = _transfers.value.map {
+        _transfers.update { list -> list.map {
             if (it.id == id) it.copy(
                 completedParts = completedParts,
                 transferredBytes = transferredBytes,
             ) else it
-        }
+        } }
     }
 
     private suspend fun executeUpload(
@@ -307,9 +311,9 @@ object TransferManager {
 
                         if (encryptedSize > MULTIPART_THRESHOLD) {
                             val totalParts = ((encryptedSize + PART_SIZE - 1) / PART_SIZE).toInt()
-                            _transfers.value = _transfers.value.map {
+                            _transfers.update { list -> list.map {
                                 if (it.id == item.id) it.copy(totalParts = totalParts) else it
-                            }
+                            } }
                             repository.uploadMultipart(
                                 key = item.s3Key,
                                 inputStream = encStream,
@@ -334,9 +338,9 @@ object TransferManager {
                     } else {
                         if (item.totalBytes > MULTIPART_THRESHOLD) {
                             val totalParts = ((item.totalBytes + PART_SIZE - 1) / PART_SIZE).toInt()
-                            _transfers.value = _transfers.value.map {
+                            _transfers.update { list -> list.map {
                                 if (it.id == item.id) it.copy(totalParts = totalParts) else it
-                            }
+                            } }
                             repository.uploadMultipart(
                                 key = item.s3Key,
                                 inputStream = stream,
@@ -367,7 +371,7 @@ object TransferManager {
             } catch (e: Exception) {
                 if (RetryPolicy.shouldRetry(e, currentRetry)) {
                     currentRetry++
-                    _transfers.value = _transfers.value.map {
+                    _transfers.update { list -> list.map {
                         if (it.id == item.id) it.copy(
                             retryCount = currentRetry,
                             state = TransferState.RETRYING,
@@ -375,7 +379,7 @@ object TransferManager {
                             transferredBytes = 0,
                             completedParts = 0,
                         ) else it
-                    }
+                    } }
                     delay(RetryPolicy.delayMs(currentRetry))
                 } else {
                     updateState(item.id, TransferState.FAILED, e.message ?: "Erro desconhecido")
@@ -427,13 +431,44 @@ object TransferManager {
             } catch (e: Exception) {
                 if (RetryPolicy.shouldRetry(e, currentRetry)) {
                     currentRetry++
-                    _transfers.value = _transfers.value.map {
+                    _transfers.update { list -> list.map {
                         if (it.id == item.id) it.copy(
                             retryCount = currentRetry,
                             state = TransferState.RETRYING,
                             errorMessage = "Tentativa $currentRetry de ${item.maxRetries}",
                         ) else it
-                    }
+                    } }
+                    delay(RetryPolicy.delayMs(currentRetry))
+                } else {
+                    updateState(item.id, TransferState.FAILED, e.message ?: "Erro desconhecido")
+                    return
+                }
+            }
+        }
+    }
+
+    private suspend fun executeDelete(item: TransferItem, config: S3Config) {
+        val repository = S3Repository(config)
+        var currentRetry = 0
+
+        while (true) {
+            try {
+                updateState(item.id, TransferState.DELETING)
+                repository.deleteFile(item.s3Key)
+                updateState(item.id, TransferState.COMPLETED)
+                return
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (RetryPolicy.shouldRetry(e, currentRetry)) {
+                    currentRetry++
+                    _transfers.update { list -> list.map {
+                        if (it.id == item.id) it.copy(
+                            retryCount = currentRetry,
+                            state = TransferState.RETRYING,
+                            errorMessage = "Tentativa $currentRetry de ${item.maxRetries}",
+                        ) else it
+                    } }
                     delay(RetryPolicy.delayMs(currentRetry))
                 } else {
                     updateState(item.id, TransferState.FAILED, e.message ?: "Erro desconhecido")

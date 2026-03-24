@@ -3,11 +3,11 @@ package com.clouddrive.transfer
 import java.util.UUID
 
 enum class TransferState {
-    QUEUED, UPLOADING, DOWNLOADING, COMPLETED, FAILED, CANCELLED, RETRYING, PAUSED
+    QUEUED, UPLOADING, DOWNLOADING, DELETING, COMPLETED, FAILED, CANCELLED, RETRYING, PAUSED
 }
 
 enum class TransferType {
-    UPLOAD, DOWNLOAD
+    UPLOAD, DOWNLOAD, DELETE
 }
 
 enum class TransferSource {
@@ -43,5 +43,5 @@ data class TransferItem(
         get() = totalParts > 0
 
     val isActive: Boolean
-        get() = state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.RETRYING, TransferState.QUEUED)
+        get() = state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING, TransferState.RETRYING, TransferState.QUEUED)
 }

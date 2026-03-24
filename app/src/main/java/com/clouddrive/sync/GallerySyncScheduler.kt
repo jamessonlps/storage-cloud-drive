@@ -73,7 +73,7 @@ object GallerySyncScheduler {
 
         androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
             "$IMMEDIATE_WORK_PREFIX$profileName",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             request,
         )
     }

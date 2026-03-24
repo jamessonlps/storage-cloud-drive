@@ -280,6 +280,17 @@ class S3Repository(private val config: S3Config) {
         return response.metadata ?: emptyMap()
     }
 
+    suspend fun listAllKeys(prefix: String = ""): List<S3FileItem> {
+        val allItems = mutableListOf<S3FileItem>()
+        var token: String? = null
+        do {
+            val result = listFilesPaged(prefix, maxKeys = 1000, continuationToken = token)
+            allItems.addAll(result.items)
+            token = result.nextToken
+        } while (token != null)
+        return allItems
+    }
+
     suspend fun deleteFile(key: String) {
         val request = DeleteObjectRequest {
             this.bucket = this@S3Repository.bucket

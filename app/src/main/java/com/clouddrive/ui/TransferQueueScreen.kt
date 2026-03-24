@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
@@ -85,7 +86,7 @@ private data class BatchGroup(
         }
 
     val currentFile: TransferItem?
-        get() = items.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING) }
+        get() = items.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING) }
 }
 
 @Composable
@@ -305,7 +306,7 @@ private fun BatchCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 if (batch.isSingleFile) {
                     val item = batch.items.first()
-                    if (item.totalBytes > 0 && item.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING)) {
+                    if (item.totalBytes > 0 && item.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING)) {
                         LinearProgressIndicator(
                             progress = item.progress,
                             modifier = Modifier.fillMaxWidth(),
@@ -361,7 +362,11 @@ private fun BatchCard(
 }
 
 private fun getBatchTitle(batch: BatchGroup): String {
-    val typeLabel = if (batch.type == TransferType.UPLOAD) "Upload" else "Download"
+    val typeLabel = when (batch.type) {
+        TransferType.UPLOAD -> "Upload"
+        TransferType.DOWNLOAD -> "Download"
+        TransferType.DELETE -> "Exclusão"
+    }
     return if (batch.isSingleFile) {
         batch.items.first().fileName
     } else {
@@ -370,7 +375,11 @@ private fun getBatchTitle(batch: BatchGroup): String {
 }
 
 private fun getBatchSubtitle(batch: BatchGroup): String {
-    val typeLabel = if (batch.type == TransferType.UPLOAD) "Upload" else "Download"
+    val typeLabel = when (batch.type) {
+        TransferType.UPLOAD -> "Upload"
+        TransferType.DOWNLOAD -> "Download"
+        TransferType.DELETE -> "Exclusão"
+    }
     return when (batch.state) {
         BatchState.ACTIVE -> {
             if (batch.isSingleFile) {
@@ -381,6 +390,7 @@ private fun getBatchSubtitle(batch: BatchGroup): String {
                         val percent = (item.progress * 100).toInt()
                         "$typeLabel: $percent%"
                     }
+                    TransferState.DELETING -> "Excluindo..."
                     TransferState.RETRYING -> "Retentando (${item.retryCount}/${item.maxRetries})..."
                     else -> "$typeLabel em andamento"
                 }
@@ -393,8 +403,11 @@ private fun getBatchSubtitle(batch: BatchGroup): String {
             else "Pausado - ${batch.completedCount} de ${batch.total} concluídos"
         }
         BatchState.COMPLETED -> {
-            if (batch.isSingleFile) "$typeLabel concluído"
-            else "${batch.total} de ${batch.total} concluídos"
+            if (batch.isSingleFile) {
+                if (batch.type == TransferType.DELETE) "Excluído" else "$typeLabel concluído"
+            } else {
+                "${batch.total} de ${batch.total} concluídos"
+            }
         }
         BatchState.HAS_FAILURES -> {
             if (batch.isSingleFile) "$typeLabel falhou"
@@ -408,6 +421,8 @@ private fun getBatchIcon(batch: BatchGroup): ImageVector {
     if (batch.state == BatchState.COMPLETED) return Icons.Filled.CheckCircle
     if (batch.state == BatchState.HAS_FAILURES) return Icons.Filled.Error
 
+    if (batch.type == TransferType.DELETE) return Icons.Filled.Delete
+
     if (batch.isSingleFile) {
         return getFileExtIcon(batch.items.first().fileName, batch.type)
     }
@@ -417,6 +432,8 @@ private fun getBatchIcon(batch: BatchGroup): ImageVector {
 private fun getBatchIconColor(batch: BatchGroup): Color {
     if (batch.state == BatchState.COMPLETED) return Color(0xFF43A047)
     if (batch.state == BatchState.HAS_FAILURES) return Color(0xFFE53935)
+
+    if (batch.type == TransferType.DELETE) return Color(0xFFE53935)
 
     if (batch.isSingleFile) {
         return getFileExtColor(batch.items.first().fileName)

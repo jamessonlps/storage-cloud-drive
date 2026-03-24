@@ -12,7 +12,6 @@ import com.clouddrive.transfer.TransferManager
 import com.clouddrive.transfer.TransferSource
 import com.clouddrive.transfer.TransferState
 import com.clouddrive.transfer.TransferType
-import kotlinx.coroutines.delay
 import java.util.UUID
 
 class GallerySyncWorker(
@@ -44,8 +43,14 @@ class GallerySyncWorker(
 
         if (enabledFolders.isEmpty()) return Result.success()
 
-        // Reset any files stuck in UPLOADING state (e.g. app was killed during previous sync)
-        dao.resetStuckUploading(profileName, bucketName)
+        // Only reset stuck UPLOADING files if TransferManager has NO active gallery sync
+        // transfers. If TransferManager is actively uploading, those files aren't stuck —
+        // they're being processed by a previous worker's batch.
+        val hasActiveGallerySync = TransferManager.transfers.value
+            .any { it.source == TransferSource.GALLERY_SYNC && it.isActive }
+        if (!hasActiveGallerySync) {
+            dao.resetStuckUploading(profileName, bucketName)
+        }
 
         // Phase 1: Scan for new files and insert as PENDING
         val newFiles = GalleryScanner.findNewFiles(
@@ -61,12 +66,22 @@ class GallerySyncWorker(
             dao.insertAll(newFiles)
         }
 
-        // Phase 2: Upload ALL pending files at once
+        // Phase 2: Upload ALL pending files, skipping any already being uploaded
         val effectiveConfig = config.copy(bucketName = bucketName)
         val allPending = dao.getAllPendingFiles(profileName, bucketName)
 
-        if (allPending.isNotEmpty()) {
-            uploadBatch(allPending, effectiveConfig, settingsManager, profileName, dao)
+        // Filter out files that TransferManager is already processing
+        val activeS3Keys = TransferManager.transfers.value
+            .filter {
+                it.source == TransferSource.GALLERY_SYNC &&
+                    (it.isActive || it.state == TransferState.QUEUED)
+            }
+            .map { it.s3Key }
+            .toSet()
+        val filesToUpload = allPending.filter { it.s3Key !in activeS3Keys }
+
+        if (filesToUpload.isNotEmpty()) {
+            enqueueBatch(filesToUpload, effectiveConfig, settingsManager, profileName, dao)
         }
 
         settingsManager.setGallerySyncLastRun(profileName, System.currentTimeMillis())
@@ -74,7 +89,12 @@ class GallerySyncWorker(
         return Result.success()
     }
 
-    private suspend fun uploadBatch(
+    /**
+     * Enqueues files to TransferManager and registers with GallerySyncTracker for Room updates.
+     * Returns immediately — does NOT wait for uploads to complete.
+     * Room status updates are handled by GallerySyncTracker (process-level observer).
+     */
+    private suspend fun enqueueBatch(
         files: List<SyncedFileEntity>,
         config: com.clouddrive.s3.S3Config,
         settingsManager: SettingsManager,
@@ -107,6 +127,11 @@ class GallerySyncWorker(
             transfer.id to room.id
         }
 
+        // Register with tracker BEFORE enqueueing — the tracker will observe
+        // TransferManager and update Room as each transfer completes.
+        // This survives the worker being killed by WorkManager.
+        GallerySyncTracker.trackBatch(batchId, transferToRoom, dao)
+
         TransferManager.enqueueBatch(
             transferItems,
             config,
@@ -114,51 +139,5 @@ class GallerySyncWorker(
             settingsManager,
             profileName,
         )
-
-        // Wait for all transfers to complete by polling TransferManager state
-        waitForBatchCompletion(batchId, transferToRoom, dao)
-    }
-
-    private suspend fun waitForBatchCompletion(
-        batchId: String,
-        transferToRoom: Map<String, Long>,
-        dao: com.clouddrive.sync.db.SyncedFileDao,
-    ) {
-        val completed = mutableSetOf<String>()
-
-        while (completed.size < transferToRoom.size && !isStopped) {
-            delay(1000)
-
-            val transfers = TransferManager.transfers.value
-            val batchTransfers = transfers.filter { it.batchId == batchId }
-
-            for (transfer in batchTransfers) {
-                if (transfer.id in completed) continue
-
-                val roomId = transferToRoom[transfer.id] ?: continue
-
-                when (transfer.state) {
-                    TransferState.COMPLETED -> {
-                        dao.updateStatus(
-                            id = roomId,
-                            status = SyncStatus.COMPLETED,
-                            syncedAt = System.currentTimeMillis(),
-                        )
-                        completed.add(transfer.id)
-                    }
-                    TransferState.FAILED,
-                    TransferState.CANCELLED -> {
-                        dao.updateStatus(
-                            id = roomId,
-                            status = SyncStatus.FAILED,
-                            error = transfer.errorMessage,
-                            retryIncrement = 1,
-                        )
-                        completed.add(transfer.id)
-                    }
-                    else -> { /* still in progress */ }
-                }
-            }
-        }
     }
 }

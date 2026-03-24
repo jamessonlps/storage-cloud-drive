@@ -136,6 +136,8 @@ fun FileListScreen(
     // Selection mode state
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedKeys = remember { mutableStateListOf<String>() }
+    var isLoadingAll by remember { mutableStateOf(false) }
+    var allSelectedInFolder by remember { mutableStateOf(false) }
 
     fun notifySelectionChanged() {
         val hasFolder = selectedKeys.any { key -> files.any { it.key == key && it.isFolder } }
@@ -153,13 +155,45 @@ fun FileListScreen(
     fun clearSelection() {
         selectedKeys.clear()
         isSelectionMode = false
+        allSelectedInFolder = false
         notifySelectionChanged()
+    }
+
+    val showSelectAllBanner by remember {
+        derivedStateOf {
+            isSelectionMode && hasMore && !allSelectedInFolder &&
+                selectedKeys.size == files.size && files.isNotEmpty()
+        }
     }
 
     fun selectAll() {
         selectedKeys.clear()
         selectedKeys.addAll(files.map { it.key })
+        allSelectedInFolder = false
         notifySelectionChanged()
+    }
+
+    fun selectAllInFolder() {
+        scope.launch {
+            isLoadingAll = true
+            try {
+                val allItems = withContext(Dispatchers.IO) {
+                    repository.listAllKeys(currentPrefix)
+                }
+                files = allItems
+                continuationToken = null
+                hasMore = false
+                onItemCountChanged(allItems.size, false)
+                selectedKeys.clear()
+                selectedKeys.addAll(allItems.map { it.key })
+                allSelectedInFolder = true
+                notifySelectionChanged()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao carregar todos: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                isLoadingAll = false
+            }
+        }
     }
 
     // React to toolbar triggers from MainActivity
@@ -249,11 +283,16 @@ fun FileListScreen(
         }
     }
 
-    // Listen for transfer completion broadcasts to refresh the file list
+    // Listen for transfer completion broadcasts to refresh the file list (debounced)
     DisposableEffect(Unit) {
+        var debounceJob: kotlinx.coroutines.Job? = null
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                loadFiles()
+                debounceJob?.cancel()
+                debounceJob = scope.launch {
+                    kotlinx.coroutines.delay(500)
+                    loadFiles()
+                }
             }
         }
         val filter = IntentFilter(ACTION_TRANSFER_COMPLETE)
@@ -366,7 +405,35 @@ fun FileListScreen(
                     )
                 }
             }
-            else -> {
+            else -> Column(modifier = Modifier.fillMaxSize()) {
+                // "Select all X items in folder" banner
+                if (showSelectAllBanner) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${files.size} itens carregados selecionados.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            TextButton(onClick = { selectAllInFolder() }) {
+                                Text("Selecionar todos os itens da pasta")
+                            }
+                        }
+                    }
+                }
+
                 if (isGridView) {
                     val gridState = rememberLazyGridState()
                     val shouldLoadMoreGrid by remember {
@@ -385,7 +452,7 @@ fun FileListScreen(
                         contentPadding = PaddingValues(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                     ) {
                         items(files, key = { it.key }) { file ->
                             GridFileItemCard(
@@ -428,7 +495,7 @@ fun FileListScreen(
                         item { Spacer(modifier = Modifier.height(80.dp)) }
                     }
                 } else {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth()) {
                         items(files, key = { it.key }) { file ->
                             FileItemCard(
                                 file = file,
@@ -497,6 +564,27 @@ fun FileListScreen(
                     .padding(16.dp),
             ) {
                 Icon(Icons.Filled.CloudUpload, contentDescription = "Upload")
+            }
+        }
+
+        // Loading overlay when fetching all items for select all
+        if (isLoadingAll) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Card {
+                    Row(
+                        modifier = Modifier.padding(24.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Text("Carregando todos os itens...")
+                    }
+                }
             }
         }
     }
@@ -584,24 +672,27 @@ fun FileListScreen(
         AlertDialog(
             onDismissRequest = { showBatchDeleteDialog = false },
             title = { Text("Excluir $count ite${if (count == 1) "m" else "ns"}") },
-            text = { Text("Deseja excluir os $count itens selecionados? Esta ação não pode ser desfeita.") },
+            text = { Text("Deseja excluir os $count itens selecionados? Esta ação não pode ser desfeita.\n\nO progresso será exibido na aba de transferências.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val keysToDelete = selectedKeys.toList()
+                        val filesToDelete = files.filter { it.key in selectedKeys }
                         showBatchDeleteDialog = false
-                        scope.launch {
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    repository.deleteFiles(keysToDelete)
-                                }
-                                clearSelection()
-                                loadFiles()
-                                Toast.makeText(context, "$count ite${if (count == 1) "m excluído" else "ns excluídos"}", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
+                        val batchId = java.util.UUID.randomUUID().toString()
+                        val items = filesToDelete.map { file ->
+                            TransferItem(
+                                batchId = batchId,
+                                fileName = file.fileName,
+                                s3Key = file.key,
+                                type = TransferType.DELETE,
+                                totalBytes = file.size,
+                                bucketName = config.bucketName,
+                            )
                         }
+                        TransferManager.enqueueBatch(items, config, context, settingsManager, profileName)
+                        Toast.makeText(context, "Exclusão iniciada: ${filesToDelete.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+                        clearSelection()
+                        loadFiles()
                     },
                 ) {
                     Text("Excluir", color = MaterialTheme.colorScheme.error)
