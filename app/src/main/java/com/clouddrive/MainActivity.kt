@@ -74,6 +74,7 @@ import com.clouddrive.ui.BucketListScreen
 import com.clouddrive.ui.FileListScreen
 import com.clouddrive.ui.GallerySyncScreen
 import com.clouddrive.ui.SettingsScreen
+import com.clouddrive.ui.SettingsSection
 import com.clouddrive.ui.TransferQueueScreen
 import com.clouddrive.ui.theme.CloudDriveTheme
 
@@ -174,6 +175,9 @@ class MainActivity : FragmentActivity() {
                 var deleteSelectedTrigger by remember { mutableIntStateOf(0) }
                 var downloadSelectedTrigger by remember { mutableIntStateOf(0) }
 
+                // Settings sub-section tracking
+                var settingsSection by remember { mutableStateOf(SettingsSection.Menu) }
+
                 // Shared snackbar
                 val snackbarHostState = remember { SnackbarHostState() }
 
@@ -200,7 +204,7 @@ class MainActivity : FragmentActivity() {
                 BackHandler(enabled = currentScreen == Screen.GallerySync) {
                     currentScreen = Screen.Settings
                 }
-                BackHandler(enabled = currentScreen == Screen.Settings || currentScreen == Screen.Transfers) {
+                BackHandler(enabled = (currentScreen == Screen.Settings && settingsSection == SettingsSection.Menu) || currentScreen == Screen.Transfers) {
                     currentScreen = Screen.Home
                 }
 
@@ -263,11 +267,26 @@ class MainActivity : FragmentActivity() {
                                         "Sincronização de Galeria",
                                         style = MaterialTheme.typography.titleMedium,
                                     )
-                                    else -> Text("Configurações AWS S3")
+                                    currentScreen == Screen.Settings -> Text(
+                                        when (settingsSection) {
+                                            SettingsSection.Menu -> "Configurações"
+                                            SettingsSection.AwsAccount -> "Conta AWS"
+                                            SettingsSection.Display -> "Exibição"
+                                            SettingsSection.Security -> "Segurança"
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    else -> Text("Configurações", style = MaterialTheme.typography.titleMedium)
                                 }
                             },
                             navigationIcon = {
-                                if (currentScreen == Screen.GallerySync) {
+                                if (currentScreen == Screen.Settings && settingsSection != SettingsSection.Menu) {
+                                    IconButton(onClick = {
+                                        settingsSection = SettingsSection.Menu
+                                    }) {
+                                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
+                                    }
+                                } else if (currentScreen == Screen.GallerySync) {
                                     IconButton(onClick = { currentScreen = Screen.Settings }) {
                                         Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
                                     }
@@ -374,7 +393,10 @@ class MainActivity : FragmentActivity() {
                             )
                             NavigationBarItem(
                                 selected = currentScreen == Screen.Settings,
-                                onClick = { currentScreen = Screen.Settings },
+                                onClick = {
+                                    settingsSection = SettingsSection.Menu
+                                    currentScreen = Screen.Settings
+                                },
                                 icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                                 label = { Text("Configurações") },
                             )
@@ -450,6 +472,8 @@ class MainActivity : FragmentActivity() {
                                 onSaveSuccess = { currentScreen = Screen.Home },
                                 onThemeModeChanged = { themeMode = it },
                                 onNavigateToGallerySync = { currentScreen = Screen.GallerySync },
+                                currentSection = settingsSection,
+                                onSectionChanged = { settingsSection = it },
                                 modifier = Modifier.padding(padding),
                             )
                         }

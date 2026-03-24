@@ -61,7 +61,7 @@ The codebase follows a **layered architecture** with clear separation of concern
 
 4. **UI Layer** (`ui/`)
    - `FileListScreen.kt` - Main screen (~320 lines): file listing, folder navigation, upload/download/delete actions
-   - `SettingsScreen.kt` - Configuration screen for AWS credentials
+   - `SettingsScreen.kt` - Settings hub with sub-screens: AWS Account (profile/credentials/region/buckets), Display (theme/listing), Security (biometric/encryption); navigation managed via `SettingsSection` enum shared with `MainActivity` TopAppBar
    - `GallerySyncScreen.kt` - Gallery sync config with ModalBottomSheet folder picker and status card
    - `theme/Theme.kt` - Material 3 theming with Dynamic Colors support (Android 12+)
 

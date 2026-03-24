@@ -1,5 +1,6 @@
 package com.clouddrive.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.biometric.BiometricManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,10 +24,15 @@ import androidx.compose.material.icons.filled.EnhancedEncryption
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.NavigateNext
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -49,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,6 +70,8 @@ import kotlinx.coroutines.launch
 private const val MASKED_SECRET = "••••••••••••••••"
 
 private val PAGE_SIZE_OPTIONS = listOf(50, 100, 200, 500)
+
+enum class SettingsSection { Menu, AwsAccount, Display, Security }
 
 @Composable
 private fun SectionHeaderWithHelp(
@@ -84,9 +93,9 @@ private fun SectionHeaderWithHelp(
             modifier = Modifier.size(32.dp),
         ) {
             Icon(
-                Icons.Filled.HelpOutline,
+                imageVector = Icons.Filled.HelpOutline,
                 contentDescription = "Ajuda sobre $title",
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -106,6 +115,59 @@ private fun SectionHeaderWithHelp(
     }
 }
 
+@Composable
+private fun SettingsMenuItem(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.Filled.NavigateNext,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// ─── Main Settings Screen (Hub) ─────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -115,6 +177,97 @@ fun SettingsScreen(
     onSaveSuccess: () -> Unit,
     onThemeModeChanged: (String) -> Unit,
     onNavigateToGallerySync: () -> Unit = {},
+    currentSection: SettingsSection = SettingsSection.Menu,
+    onSectionChanged: (SettingsSection) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    BackHandler(enabled = currentSection != SettingsSection.Menu) {
+        onSectionChanged(SettingsSection.Menu)
+    }
+
+    when (currentSection) {
+        SettingsSection.Menu -> SettingsMenuScreen(
+            settingsManager = settingsManager,
+            currentProfileName = currentProfileName,
+            onNavigateTo = { onSectionChanged(it) },
+            onNavigateToGallerySync = onNavigateToGallerySync,
+            modifier = modifier,
+        )
+        SettingsSection.AwsAccount -> AwsAccountSection(
+            settingsManager = settingsManager,
+            currentProfileName = currentProfileName,
+            snackbarHostState = snackbarHostState,
+            onSaveSuccess = onSaveSuccess,
+            modifier = modifier,
+        )
+        SettingsSection.Display -> DisplaySection(
+            settingsManager = settingsManager,
+            onThemeModeChanged = onThemeModeChanged,
+            modifier = modifier,
+        )
+        SettingsSection.Security -> SecuritySection(
+            settingsManager = settingsManager,
+            currentProfileName = currentProfileName,
+            modifier = modifier,
+        )
+    }
+}
+
+// ─── Menu Hub ───────────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsMenuScreen(
+    settingsManager: SettingsManager,
+    currentProfileName: String?,
+    onNavigateTo: (SettingsSection) -> Unit,
+    onNavigateToGallerySync: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsMenuItem(
+            icon = Icons.Filled.Person,
+            title = "Conta AWS",
+            description = currentProfileName?.let { "Perfil: $it" } ?: "Perfis, credenciais, região e buckets",
+            onClick = { onNavigateTo(SettingsSection.AwsAccount) },
+        )
+
+        SettingsMenuItem(
+            icon = Icons.Filled.Palette,
+            title = "Exibição",
+            description = "Tema e listagem de arquivos",
+            onClick = { onNavigateTo(SettingsSection.Display) },
+        )
+
+        SettingsMenuItem(
+            icon = Icons.Filled.Security,
+            title = "Segurança",
+            description = "Biometria e criptografia",
+            onClick = { onNavigateTo(SettingsSection.Security) },
+        )
+
+        SettingsMenuItem(
+            icon = Icons.Filled.CloudSync,
+            title = "Sincronização",
+            description = if (currentProfileName != null && settingsManager.isGallerySyncEnabled(currentProfileName)) "Ativa" else "Desativada",
+            onClick = onNavigateToGallerySync,
+        )
+    }
+}
+
+// ─── AWS Account Section ────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AwsAccountSection(
+    settingsManager: SettingsManager,
+    currentProfileName: String?,
+    snackbarHostState: SnackbarHostState,
+    onSaveSuccess: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val profiles = remember { settingsManager.getProfileNames() }.toMutableList()
@@ -123,7 +276,6 @@ fun SettingsScreen(
     var showNewProfileDialog by remember { mutableStateOf(false) }
     var showDeleteProfileDialog by remember { mutableStateOf(false) }
 
-    // Load config for the selected profile
     val profileConfig = remember(selectedProfile) {
         if (selectedProfile.isNotBlank()) settingsManager.getProfileConfig(selectedProfile) else null
     }
@@ -150,11 +302,6 @@ fun SettingsScreen(
     var showSecret by remember(selectedProfile) { mutableStateOf(false) }
     var accessKeyEdited by remember(selectedProfile) { mutableStateOf(false) }
     var secretKeyEdited by remember(selectedProfile) { mutableStateOf(false) }
-
-    var selectedPageSize by remember { mutableIntStateOf(settingsManager.getPageSize()) }
-    var pageSizeExpanded by remember { mutableStateOf(false) }
-    var selectedThemeMode by remember { mutableStateOf(settingsManager.getThemeMode()) }
-    var themeModeExpanded by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -276,6 +423,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // --- Region ---
         SectionHeaderWithHelp(
             title = "Região",
             helpText = "A região AWS onde seu bucket S3 está localizado (ex: us-east-1, sa-east-1). Escolha a região mais próxima de você para melhor performance. Verifique no console do S3 em qual região o bucket foi criado.",
@@ -291,6 +439,7 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // --- Buckets ---
         SectionHeaderWithHelp(
             title = "Buckets",
             helpText = "Buckets são os \"contêineres\" de armazenamento do S3. Cada bucket tem um nome único global. Adicione aqui os buckets que deseja acessar com este perfil. O nome AWS deve ser exato; o nome de exibição é como ele aparecerá no app.",
@@ -345,237 +494,9 @@ fun SettingsScreen(
             Text("Adicionar Bucket")
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SectionHeaderWithHelp(
-            title = "Configurações de Listagem",
-            helpText = "Define quantos arquivos são carregados por vez ao navegar pelas pastas do bucket. Valores menores carregam mais rápido, mas exigem mais paginação. Valores maiores mostram mais arquivos de uma vez, mas podem demorar mais em conexões lentas.",
-        )
-
-        ExposedDropdownMenuBox(
-            expanded = pageSizeExpanded,
-            onExpandedChange = { pageSizeExpanded = !pageSizeExpanded },
-        ) {
-            OutlinedTextField(
-                value = "$selectedPageSize itens por página",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Itens por lote") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = pageSizeExpanded) },
-                modifier = Modifier.fillMaxWidth().menuAnchor(),
-            )
-            ExposedDropdownMenu(
-                expanded = pageSizeExpanded,
-                onDismissRequest = { pageSizeExpanded = false },
-            ) {
-                PAGE_SIZE_OPTIONS.forEach { size ->
-                    DropdownMenuItem(
-                        text = { Text("$size itens") },
-                        onClick = {
-                            selectedPageSize = size
-                            settingsManager.savePageSize(size)
-                            pageSizeExpanded = false
-                        },
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SectionHeaderWithHelp(
-            title = "Aparência",
-            helpText = "Escolha entre tema claro, escuro ou automático (segue a configuração do sistema). Em dispositivos com Android 12+, as cores do app se adaptam automaticamente ao papel de parede.",
-        )
-
-        ExposedDropdownMenuBox(
-            expanded = themeModeExpanded,
-            onExpandedChange = { themeModeExpanded = !themeModeExpanded },
-        ) {
-            OutlinedTextField(
-                value = when (selectedThemeMode) {
-                    SettingsManager.THEME_LIGHT -> "Claro"
-                    SettingsManager.THEME_DARK -> "Escuro"
-                    else -> "Sistema"
-                },
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Tema") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeModeExpanded) },
-                modifier = Modifier.fillMaxWidth().menuAnchor(),
-            )
-            ExposedDropdownMenu(
-                expanded = themeModeExpanded,
-                onDismissRequest = { themeModeExpanded = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Sistema") },
-                    onClick = {
-                        selectedThemeMode = SettingsManager.THEME_SYSTEM
-                        settingsManager.saveThemeMode(SettingsManager.THEME_SYSTEM)
-                        onThemeModeChanged(SettingsManager.THEME_SYSTEM)
-                        themeModeExpanded = false
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Claro") },
-                    onClick = {
-                        selectedThemeMode = SettingsManager.THEME_LIGHT
-                        settingsManager.saveThemeMode(SettingsManager.THEME_LIGHT)
-                        onThemeModeChanged(SettingsManager.THEME_LIGHT)
-                        themeModeExpanded = false
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Escuro") },
-                    onClick = {
-                        selectedThemeMode = SettingsManager.THEME_DARK
-                        settingsManager.saveThemeMode(SettingsManager.THEME_DARK)
-                        onThemeModeChanged(SettingsManager.THEME_DARK)
-                        themeModeExpanded = false
-                    },
-                )
-            }
-        }
-
-        // Biometric authentication toggle
-        val context = LocalContext.current
-        val biometricManager = remember { BiometricManager.from(context) }
-        val canAuthenticate = remember {
-            biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-                BiometricManager.BIOMETRIC_SUCCESS
-        }
-
-        if (canAuthenticate) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SectionHeaderWithHelp(
-                title = "Segurança",
-                helpText = "Configurações de proteção do app e dos seus arquivos. A biometria protege o acesso ao app. A criptografia AES-256-GCM protege o conteúdo dos arquivos antes do envio ao S3 — mesmo que alguém acesse seu bucket, não conseguirá ler os arquivos sem a chave.",
-            )
-
-            var biometricEnabled by remember { mutableStateOf(settingsManager.isBiometricEnabled()) }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Filled.Fingerprint,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(
-                        text = "Autenticação biométrica",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        text = "Exigir fingerprint ao abrir o app",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = biometricEnabled,
-                    onCheckedChange = {
-                        biometricEnabled = it
-                        settingsManager.setBiometricEnabled(it)
-                    },
-                )
-            }
-        }
-
-        // Encryption toggle
-        if (selectedProfile.isNotBlank()) {
-            var encryptionEnabled by remember(selectedProfile) {
-                mutableStateOf(settingsManager.isEncryptionEnabled(selectedProfile))
-            }
-
-            if (!canAuthenticate) {
-                Spacer(modifier = Modifier.height(8.dp))
-                SectionHeaderWithHelp(
-                    title = "Segurança",
-                    helpText = "A criptografia AES-256-GCM protege o conteúdo dos arquivos antes do envio ao S3. Mesmo que alguém acesse seu bucket, não conseguirá ler os arquivos sem a chave. A chave é gerada automaticamente e armazenada de forma segura no dispositivo.",
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Filled.EnhancedEncryption,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(
-                        text = "Criptografia de arquivos",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Text(
-                        text = "Criptografa arquivos com AES-256 antes do upload",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = encryptionEnabled,
-                    onCheckedChange = { enabled ->
-                        encryptionEnabled = enabled
-                        settingsManager.setEncryptionEnabled(selectedProfile, enabled)
-                        if (enabled) {
-                            EncryptionManager.getOrCreateKey(settingsManager, selectedProfile)
-                        }
-                    },
-                )
-            }
-        }
-
-        // Gallery Sync shortcut
-        if (selectedProfile.isNotBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            SectionHeaderWithHelp(
-                title = "Sincronização",
-                helpText = "Faça backup automático das fotos e vídeos da galeria do celular para um bucket S3. A sincronização é unidirecional: deletar do celular não remove do S3. Configure pastas, bucket e frequência na tela de sincronização.",
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onNavigateToGallerySync)
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Filled.CloudSync,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(
-                        text = "Sincronização de Galeria",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    val syncStatus = if (settingsManager.isGallerySyncEnabled(selectedProfile)) "Ativa" else "Desativada"
-                    Text(
-                        text = syncStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Icon(
-                    Icons.Filled.NavigateNext,
-                    contentDescription = "Abrir sincronização de galeria",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
         Spacer(modifier = Modifier.height(16.dp))
 
+        // --- Save / Clear ---
         Button(
             onClick = {
                 if (selectedProfile.isBlank()) {
@@ -748,5 +669,229 @@ fun SettingsScreen(
                 }
             },
         )
+    }
+}
+
+// ─── Display Section ────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DisplaySection(
+    settingsManager: SettingsManager,
+    onThemeModeChanged: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var selectedPageSize by remember { mutableIntStateOf(settingsManager.getPageSize()) }
+    var pageSizeExpanded by remember { mutableStateOf(false) }
+    var selectedThemeMode by remember { mutableStateOf(settingsManager.getThemeMode()) }
+    var themeModeExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // --- Theme ---
+        SectionHeaderWithHelp(
+            title = "Aparência",
+            helpText = "Escolha entre tema claro, escuro ou automático (segue a configuração do sistema). Em dispositivos com Android 12+, as cores do app se adaptam automaticamente ao papel de parede.",
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = themeModeExpanded,
+            onExpandedChange = { themeModeExpanded = !themeModeExpanded },
+        ) {
+            OutlinedTextField(
+                value = when (selectedThemeMode) {
+                    SettingsManager.THEME_LIGHT -> "Claro"
+                    SettingsManager.THEME_DARK -> "Escuro"
+                    else -> "Sistema"
+                },
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Tema") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = themeModeExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+            )
+            ExposedDropdownMenu(
+                expanded = themeModeExpanded,
+                onDismissRequest = { themeModeExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Sistema") },
+                    onClick = {
+                        selectedThemeMode = SettingsManager.THEME_SYSTEM
+                        settingsManager.saveThemeMode(SettingsManager.THEME_SYSTEM)
+                        onThemeModeChanged(SettingsManager.THEME_SYSTEM)
+                        themeModeExpanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Claro") },
+                    onClick = {
+                        selectedThemeMode = SettingsManager.THEME_LIGHT
+                        settingsManager.saveThemeMode(SettingsManager.THEME_LIGHT)
+                        onThemeModeChanged(SettingsManager.THEME_LIGHT)
+                        themeModeExpanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Escuro") },
+                    onClick = {
+                        selectedThemeMode = SettingsManager.THEME_DARK
+                        settingsManager.saveThemeMode(SettingsManager.THEME_DARK)
+                        onThemeModeChanged(SettingsManager.THEME_DARK)
+                        themeModeExpanded = false
+                    },
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // --- Listing ---
+        SectionHeaderWithHelp(
+            title = "Configurações de Listagem",
+            helpText = "Define quantos arquivos são carregados por vez ao navegar pelas pastas do bucket. Valores menores carregam mais rápido, mas exigem mais paginação. Valores maiores mostram mais arquivos de uma vez, mas podem demorar mais em conexões lentas.",
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = pageSizeExpanded,
+            onExpandedChange = { pageSizeExpanded = !pageSizeExpanded },
+        ) {
+            OutlinedTextField(
+                value = "$selectedPageSize itens por página",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Itens por lote") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = pageSizeExpanded) },
+                modifier = Modifier.fillMaxWidth().menuAnchor(),
+            )
+            ExposedDropdownMenu(
+                expanded = pageSizeExpanded,
+                onDismissRequest = { pageSizeExpanded = false },
+            ) {
+                PAGE_SIZE_OPTIONS.forEach { size ->
+                    DropdownMenuItem(
+                        text = { Text("$size itens") },
+                        onClick = {
+                            selectedPageSize = size
+                            settingsManager.savePageSize(size)
+                            pageSizeExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ─── Security Section ───────────────────────────────────────────────────
+
+@Composable
+private fun SecuritySection(
+    settingsManager: SettingsManager,
+    currentProfileName: String?,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val biometricManager = remember { BiometricManager.from(context) }
+    val canAuthenticate = remember {
+        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SectionHeaderWithHelp(
+            title = "Segurança",
+            helpText = "Configurações de proteção do app e dos seus arquivos. A biometria protege o acesso ao app. A criptografia AES-256-GCM protege o conteúdo dos arquivos antes do envio ao S3 — mesmo que alguém acesse seu bucket, não conseguirá ler os arquivos sem a chave.",
+        )
+
+        if (canAuthenticate) {
+            var biometricEnabled by remember { mutableStateOf(settingsManager.isBiometricEnabled()) }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Fingerprint,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        text = "Autenticação biométrica",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Exigir fingerprint ao abrir o app",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = biometricEnabled,
+                    onCheckedChange = {
+                        biometricEnabled = it
+                        settingsManager.setBiometricEnabled(it)
+                    },
+                )
+            }
+        }
+
+        if (currentProfileName != null && currentProfileName.isNotBlank()) {
+            var encryptionEnabled by remember(currentProfileName) {
+                mutableStateOf(settingsManager.isEncryptionEnabled(currentProfileName))
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.EnhancedEncryption,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        text = "Criptografia de arquivos",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Criptografa arquivos com AES-256 antes do upload",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = encryptionEnabled,
+                    onCheckedChange = { enabled ->
+                        encryptionEnabled = enabled
+                        settingsManager.setEncryptionEnabled(currentProfileName, enabled)
+                        if (enabled) {
+                            EncryptionManager.getOrCreateKey(settingsManager, currentProfileName)
+                        }
+                    },
+                )
+            }
+        }
+
+        if (!canAuthenticate && (currentProfileName == null || currentProfileName.isBlank())) {
+            Text(
+                text = "Nenhuma opção de segurança disponível. Configure um perfil e/ou cadastre biometria no dispositivo.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
