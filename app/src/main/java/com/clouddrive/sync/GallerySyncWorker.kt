@@ -10,7 +10,9 @@ import com.clouddrive.sync.db.SyncedFileEntity
 import com.clouddrive.transfer.TransferItem
 import com.clouddrive.transfer.TransferManager
 import com.clouddrive.transfer.TransferSource
+import com.clouddrive.transfer.TransferState
 import com.clouddrive.transfer.TransferType
+import kotlinx.coroutines.delay
 import java.util.UUID
 
 class GallerySyncWorker(
@@ -21,7 +23,6 @@ class GallerySyncWorker(
     companion object {
         const val KEY_PROFILE_NAME = "profile_name"
         const val KEY_BUCKET_NAME = "bucket_name"
-        private const val BATCH_SIZE = 20
     }
 
     override suspend fun doWork(): Result {
@@ -43,6 +44,9 @@ class GallerySyncWorker(
 
         if (enabledFolders.isEmpty()) return Result.success()
 
+        // Reset any files stuck in UPLOADING state (e.g. app was killed during previous sync)
+        dao.resetStuckUploading(profileName, bucketName)
+
         // Phase 1: Scan for new files and insert as PENDING
         val newFiles = GalleryScanner.findNewFiles(
             context = applicationContext,
@@ -57,14 +61,12 @@ class GallerySyncWorker(
             dao.insertAll(newFiles)
         }
 
-        // Phase 2: Upload pending files in batches
+        // Phase 2: Upload ALL pending files at once
         val effectiveConfig = config.copy(bucketName = bucketName)
+        val allPending = dao.getAllPendingFiles(profileName, bucketName)
 
-        while (!isStopped) {
-            val pendingBatch = dao.getPendingFiles(profileName, bucketName, BATCH_SIZE)
-            if (pendingBatch.isEmpty()) break
-
-            uploadBatch(pendingBatch, effectiveConfig, settingsManager, profileName, dao)
+        if (allPending.isNotEmpty()) {
+            uploadBatch(allPending, effectiveConfig, settingsManager, profileName, dao)
         }
 
         settingsManager.setGallerySyncLastRun(profileName, System.currentTimeMillis())
@@ -113,7 +115,7 @@ class GallerySyncWorker(
             profileName,
         )
 
-        // Wait for this batch to complete by polling TransferManager state
+        // Wait for all transfers to complete by polling TransferManager state
         waitForBatchCompletion(batchId, transferToRoom, dao)
     }
 
@@ -124,7 +126,10 @@ class GallerySyncWorker(
     ) {
         val completed = mutableSetOf<String>()
 
-        TransferManager.transfers.collect { transfers ->
+        while (completed.size < transferToRoom.size && !isStopped) {
+            delay(1000)
+
+            val transfers = TransferManager.transfers.value
             val batchTransfers = transfers.filter { it.batchId == batchId }
 
             for (transfer in batchTransfers) {
@@ -133,7 +138,7 @@ class GallerySyncWorker(
                 val roomId = transferToRoom[transfer.id] ?: continue
 
                 when (transfer.state) {
-                    com.clouddrive.transfer.TransferState.COMPLETED -> {
+                    TransferState.COMPLETED -> {
                         dao.updateStatus(
                             id = roomId,
                             status = SyncStatus.COMPLETED,
@@ -141,8 +146,8 @@ class GallerySyncWorker(
                         )
                         completed.add(transfer.id)
                     }
-                    com.clouddrive.transfer.TransferState.FAILED,
-                    com.clouddrive.transfer.TransferState.CANCELLED -> {
+                    TransferState.FAILED,
+                    TransferState.CANCELLED -> {
                         dao.updateStatus(
                             id = roomId,
                             status = SyncStatus.FAILED,
@@ -153,11 +158,6 @@ class GallerySyncWorker(
                     }
                     else -> { /* still in progress */ }
                 }
-            }
-
-            // All transfers in batch resolved
-            if (completed.size >= transferToRoom.size) {
-                return@collect
             }
         }
     }

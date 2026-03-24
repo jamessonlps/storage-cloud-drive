@@ -70,7 +70,7 @@ object GalleryScanner {
                         fileSize = info.fileSize,
                         dateModified = info.dateModified,
                         mimeType = info.mimeType,
-                        s3Key = "${s3Prefix}${info.folderName}/${info.fileName}",
+                        s3Key = buildS3Key(s3Prefix, info.folderName, info.fileName),
                         s3Bucket = bucket,
                         profileName = profileName,
                         syncStatus = SyncStatus.PENDING,
@@ -160,6 +160,15 @@ object GalleryScanner {
                     ),
                 )
             }
+        }
+    }
+
+    private fun buildS3Key(prefix: String, folderName: String, fileName: String): String {
+        val normalizedPrefix = prefix.trim('/')
+        return if (normalizedPrefix.isEmpty()) {
+            "$folderName/$fileName"
+        } else {
+            "$normalizedPrefix/$folderName/$fileName"
         }
     }
 

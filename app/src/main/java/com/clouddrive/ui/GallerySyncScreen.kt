@@ -6,6 +6,7 @@ import android.os.Build
 import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,8 +29,10 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -71,6 +74,7 @@ import com.clouddrive.s3.SettingsManager
 import com.clouddrive.sync.GalleryContentObserver
 import com.clouddrive.sync.GalleryScanner
 import com.clouddrive.sync.GallerySyncScheduler
+import com.clouddrive.transfer.TransferManager
 import com.clouddrive.sync.db.SyncStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -330,21 +334,45 @@ fun GallerySyncScreen(
             )
             InlineHelpIcon(
                 title = "Prefixo S3",
-                helpText = "O prefixo é a \"pasta raiz\" dentro do bucket onde os arquivos serão salvos. A estrutura final será: prefixo/NomeDaPasta/arquivo.jpg. Por exemplo, com prefixo \"/galeria\": /galeria/Camera/IMG_001.jpg, /galeria/Screenshots/Screenshot_01.png",
+                helpText = "O prefixo é a \"pasta raiz\" dentro do bucket onde os arquivos serão salvos. A estrutura final será: prefixo/NomeDaPasta/arquivo.jpg. Por exemplo, com prefixo \"galeria\": galeria/Camera/IMG_001.jpg, galeria/Screenshots/Screenshot_01.png. Não use barras no início ou fim — elas são removidas automaticamente.",
             )
+        }
+
+        val prefixError = remember(s3Prefix) {
+            when {
+                s3Prefix.contains("//") -> "Barras duplas não são permitidas"
+                s3Prefix.contains(" ") -> "Espaços não são permitidos"
+                s3Prefix.any { it in "\\#?%&{}|^~[]`<>\"" } -> "Contém caracteres inválidos"
+                else -> null
+            }
+        }
+
+        val normalizedPreview = remember(s3Prefix) {
+            s3Prefix.trim('/').replace(Regex("/+"), "/")
         }
 
         OutlinedTextField(
             value = s3Prefix,
             onValueChange = { value ->
-                s3Prefix = value
-                settingsManager.setGallerySyncPrefix(profileName, value)
+                // Normaliza em tempo real: remove barras no início, colapsa barras duplas
+                val normalized = value
+                    .trimStart('/')
+                    .replace(Regex("/+"), "/")
+                s3Prefix = normalized
+                settingsManager.setGallerySyncPrefix(profileName, normalized)
             },
             label = { Text("Prefixo") },
             singleLine = true,
+            isError = prefixError != null,
             modifier = Modifier.fillMaxWidth(),
             supportingText = {
-                Text("Exemplo: /galeria/Camera/IMG_001.jpg")
+                if (prefixError != null) {
+                    Text(prefixError, color = MaterialTheme.colorScheme.error)
+                } else if (normalizedPreview.isNotEmpty()) {
+                    Text("Resultado: $normalizedPreview/NomeDaPasta/arquivo.jpg")
+                } else {
+                    Text("Resultado: NomeDaPasta/arquivo.jpg (raiz do bucket)")
+                }
             },
         )
 
@@ -715,6 +743,82 @@ fun GallerySyncScreen(
                     Text("Retentar Falhas")
                 }
             }
+        }
+
+        // Cancel sync and clear history button
+        var showCancelDialog by remember { mutableStateOf(false) }
+
+        if (syncStats.total > 0) {
+            OutlinedButton(
+                onClick = { showCancelDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                ),
+            ) {
+                Icon(Icons.Filled.DeleteSweep, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Cancelar e Limpar Histórico")
+            }
+        }
+
+        if (showCancelDialog) {
+            AlertDialog(
+                onDismissRequest = { showCancelDialog = false },
+                title = { Text("Cancelar sincronização?") },
+                text = {
+                    Text(
+                        "Isso vai:\n\n" +
+                            "\u2022 Cancelar uploads em andamento\n" +
+                            "\u2022 Parar a sincronização automática\n" +
+                            "\u2022 Limpar todo o histórico de sincronização\n\n" +
+                            "Os arquivos já enviados ao S3 não serão removidos. " +
+                            "Você poderá sincronizar novamente depois.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showCancelDialog = false
+                            scope.launch {
+                                // 1. Cancel WorkManager jobs
+                                GallerySyncScheduler.cancelAll(context, profileName)
+
+                                // 2. Cancel active gallery sync transfers
+                                TransferManager.cancelGallerySyncTransfers()
+
+                                // 3. Clear Room database for this profile+bucket
+                                withContext(Dispatchers.IO) {
+                                    if (selectedBucket.isNotBlank()) {
+                                        app?.syncDatabase?.syncedFileDao()
+                                            ?.deleteByBucket(profileName, selectedBucket)
+                                    }
+                                }
+
+                                // 4. Disable sync toggle
+                                syncEnabled = false
+                                settingsManager.setGallerySyncEnabled(profileName, false)
+
+                                // 5. Update content observer
+                                GalleryContentObserver.updateRegistration(context, settingsManager)
+
+                                snackbarHostState.showSnackbar("Sincronização cancelada e histórico limpo")
+                            }
+                        },
+                    ) {
+                        Text("Cancelar e Limpar", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCancelDialog = false }) {
+                        Text("Voltar")
+                    }
+                },
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

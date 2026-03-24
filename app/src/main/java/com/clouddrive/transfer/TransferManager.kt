@@ -188,6 +188,15 @@ object TransferManager {
         }
     }
 
+    fun cancelGallerySyncTransfers() {
+        val gallerySyncItems = _transfers.value.filter { it.source == TransferSource.GALLERY_SYNC }
+        for (item in gallerySyncItems) {
+            jobs[item.id]?.cancel()
+            jobs.remove(item.id)
+        }
+        _transfers.value = _transfers.value.filter { it.source != TransferSource.GALLERY_SYNC }
+    }
+
     // --- Helpers ---
 
     private fun persistUri(item: TransferItem, context: Context) {

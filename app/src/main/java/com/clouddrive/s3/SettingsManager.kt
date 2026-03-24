@@ -328,11 +328,15 @@ class SettingsManager(context: Context) {
     }
 
     fun getGallerySyncPrefix(profileName: String): String {
-        return prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "/galeria"
+        return prefs.getString(profileKey(profileName, "gallery_sync_prefix"), null) ?: "galeria"
     }
 
     fun setGallerySyncPrefix(profileName: String, prefix: String) {
-        prefs.edit().putString(profileKey(profileName, "gallery_sync_prefix"), prefix).apply()
+        val normalized = prefix
+            .trim('/')
+            .replace(Regex("/+"), "/")
+            .trimEnd('/')
+        prefs.edit().putString(profileKey(profileName, "gallery_sync_prefix"), normalized).apply()
     }
 
     fun isGallerySyncWifiOnly(profileName: String): Boolean {

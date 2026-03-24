@@ -44,6 +44,18 @@ object GallerySyncScheduler {
         )
     }
 
+    fun cancelImmediate(context: Context, profileName: String) {
+        androidx.work.WorkManager.getInstance(context).cancelUniqueWork(
+            "$IMMEDIATE_WORK_PREFIX$profileName",
+        )
+    }
+
+    fun cancelAll(context: Context, profileName: String) {
+        val wm = androidx.work.WorkManager.getInstance(context)
+        wm.cancelUniqueWork("$PERIODIC_WORK_PREFIX$profileName")
+        wm.cancelUniqueWork("$IMMEDIATE_WORK_PREFIX$profileName")
+    }
+
     fun triggerImmediate(context: Context, profileName: String, bucketName: String, wifiOnly: Boolean = true) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)

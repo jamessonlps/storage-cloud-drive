@@ -15,9 +15,15 @@ interface SyncedFileDao {
     @Query(
         """SELECT * FROM synced_files
         WHERE profileName = :profileName AND s3Bucket = :bucket AND syncStatus = 'PENDING'
-        ORDER BY dateModified ASC LIMIT :limit"""
+        ORDER BY dateModified ASC"""
     )
-    suspend fun getPendingFiles(profileName: String, bucket: String, limit: Int = 20): List<SyncedFileEntity>
+    suspend fun getAllPendingFiles(profileName: String, bucket: String): List<SyncedFileEntity>
+
+    @Query(
+        """UPDATE synced_files SET syncStatus = 'PENDING'
+        WHERE profileName = :profileName AND s3Bucket = :bucket AND syncStatus = 'UPLOADING'"""
+    )
+    suspend fun resetStuckUploading(profileName: String, bucket: String)
 
     @Query(
         """SELECT * FROM synced_files
