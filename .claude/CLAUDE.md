@@ -46,13 +46,14 @@ The codebase follows a **layered architecture** with clear separation of concern
    - `S3Config.kt` - Data class for AWS configuration (accessKeyId, secretAccessKey, region, bucketName)
 
 2. **Service Layer** (`service/`)
-   - `TransferService.kt` - Foreground Service for background uploads/downloads with progress notifications
+   - `TransferService.kt` - Foreground Service for background uploads/downloads/deletes with progress notifications
    - Uses notification progress and BroadcastReceiver for UI updates
 
 3. **Sync Layer** (`sync/`)
    - `GalleryScanner.kt` - Reads MediaStore (Images + Videos), returns gallery folders and files
-   - `GallerySyncWorker.kt` - CoroutineWorker: scans gallery, inserts pending files in Room, feeds TransferManager
-   - `GallerySyncScheduler.kt` - WorkManager scheduling: periodic (6h) and immediate sync jobs
+   - `GallerySyncWorker.kt` - CoroutineWorker: scans gallery, inserts pending files in Room, enqueues to TransferManager, returns immediately (does NOT poll for completion)
+   - `GallerySyncTracker.kt` - Process-level singleton that observes TransferManager and updates Room as gallery sync transfers complete (survives WorkManager worker timeouts)
+   - `GallerySyncScheduler.kt` - WorkManager scheduling: periodic (6h) and immediate sync jobs, with cancelImmediate/cancelAll support
    - `GalleryContentObserver.kt` - ContentObserver for real-time new photo detection (30s debounce)
    - `db/SyncDatabase.kt` - Room database with `synced_files` table
    - `db/SyncedFileEntity.kt` - Entity tracking each synced file (mediaStoreId, status, s3Key, etc.)
@@ -68,7 +69,7 @@ The codebase follows a **layered architecture** with clear separation of concern
 
 1. **Initialization**: `CloudDriveApp` → `MainActivity` → `FileListScreen` or `SettingsScreen`
 2. **Configuration**: User fills `SettingsScreen` → credentials saved in `SettingsManager` → `S3ClientProvider` initializes
-3. **File Operations**: `FileListScreen` calls `S3Repository` → `TransferService` for background work → Progress via Notifications
+3. **File Operations**: `FileListScreen` calls `S3Repository` → `TransferManager` for background work (uploads, downloads, deletes) → `TransferService` for foreground notification → Progress via StateFlow + BroadcastReceiver
 4. **Credentials**: Stored securely in DataStore (Android private app storage), never hardcoded
 
 ### State Management
@@ -107,12 +108,20 @@ All S3 operations are suspend functions in `S3Repository`. UI calls happen via `
 - **Password Toggle**: Secret Access Key uses `PasswordVisualTransformation` UI for visibility control
 - **IAM Permissions**: Users need S3 ListBucket, GetObject, PutObject, DeleteObject on their bucket
 
-### Background Transfers (TransferService)
+### Background Transfers (TransferManager + TransferService)
 
-- **Foreground Service** with persistent notification (required by Android 12+)
-- Progress updates via Notification and BroadcastReceiver
+- **TransferManager** (singleton): manages all transfers (upload/download/delete) via coroutine scope with semaphores (3 for upload/download, 15 for delete)
+- All state mutations use atomic `_transfers.update {}` (CAS loop) to prevent race conditions with concurrent operations
+- **TransferService**: Foreground Service with persistent notification (required by Android 12+)
+- Progress updates via StateFlow and BroadcastReceiver
 - Survives app being pushed to background or destroyed
 - Must have `POST_NOTIFICATIONS` permission (Android 13+)
+
+### Gallery Sync Architecture
+
+- **GallerySyncWorker**: enqueues uploads and returns immediately (does NOT poll/wait)
+- **GallerySyncTracker**: process-level observer (not tied to WorkManager) that watches `TransferManager.transfers` StateFlow and updates Room as each transfer completes — this survives the worker being killed by WorkManager's 10-minute timeout
+- Worker checks for active gallery sync transfers before resetting stuck files or creating new batches (prevents duplicates)
 
 ### Material 3 / Dynamic Colors
 
