@@ -33,6 +33,21 @@ object S3ClientProvider {
     private var currentClient: S3Client? = null
     private var currentKey: ClientKey? = null
 
+    private fun createClient(config: S3Config): S3Client = S3Client {
+        region = config.region
+        credentialsProvider = StaticCredentialsProvider(
+            config.accessKeyId,
+            config.secretAccessKey,
+        )
+    }
+
+    /**
+     * Builds the real client. Replaceable only so unit tests can run: the AWS SDK cannot start in
+     * a local JVM test of an Android module (it reads Build.VERSION fields that are null in the
+     * stub android.jar and fails with a NullPointerException).
+     */
+    internal var clientFactory: (S3Config) -> S3Client = { config -> createClient(config) }
+
     @Synchronized
     fun getClient(config: S3Config): S3Client {
         val key = ClientKey(config.accessKeyId, config.secretAccessKey, config.region)
@@ -42,13 +57,7 @@ object S3ClientProvider {
 
         currentClient?.close()
 
-        val client = S3Client {
-            region = config.region
-            credentialsProvider = StaticCredentialsProvider(
-                config.accessKeyId,
-                config.secretAccessKey,
-            )
-        }
+        val client = clientFactory(config)
 
         currentClient = client
         currentKey = key
