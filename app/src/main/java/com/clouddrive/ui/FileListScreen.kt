@@ -330,11 +330,9 @@ fun FileListScreen(
             }
         }
         val filter = IntentFilter(ACTION_TRANSFER_COMPLETE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
+        // Not exported on every API level: before Android 13 the plain registerReceiver() made
+        // this internal action receivable by any other app on the device.
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose {
             context.unregisterReceiver(receiver)
         }

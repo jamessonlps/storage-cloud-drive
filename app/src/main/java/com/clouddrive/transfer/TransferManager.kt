@@ -258,7 +258,8 @@ object TransferManager {
             } finally {
                 sem.release()
                 jobs.remove(item.id)
-                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE))
+                // Restricted to this app: the receiver is not exported.
+                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE).setPackage(context.packageName))
             }
         }
         jobs[item.id] = job

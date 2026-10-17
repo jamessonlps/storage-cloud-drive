@@ -8,7 +8,8 @@ import aws.sdk.kotlin.services.s3.model.ListObjectsV2Request
 import aws.sdk.kotlin.services.s3.model.ListObjectsV2Response
 import aws.sdk.kotlin.services.s3.model.PutObjectRequest
 import aws.sdk.kotlin.services.s3.model.PutObjectResponse
-import aws.sdk.kotlin.services.s3.model.S3Object
+// In SDK 1.0.x the model class is called `Object`; it was renamed to S3Object only later.
+import aws.sdk.kotlin.services.s3.model.Object as S3Object
 import aws.smithy.kotlin.runtime.time.Instant
 import io.mockk.coEvery
 import io.mockk.coVerify
