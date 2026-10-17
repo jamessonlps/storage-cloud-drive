@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
+import androidx.annotation.RequiresApi
 import java.io.File
 import java.io.IOException
 
@@ -30,6 +31,7 @@ object DownloadsStore {
         source.delete()
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun publishScoped(context: Context, source: File, name: String) {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
