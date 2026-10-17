@@ -1,10 +1,21 @@
 package com.clouddrive.s3
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class S3ConfigTest {
+
+    @Test
+    fun `toString never exposes the secret key`() {
+        val config = S3Config("AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", "bucket")
+        val text = config.toString()
+        assertFalse(text.contains("wJalrXUtnFEMI"))
+        assertFalse(text.contains("AKIAIOSFODNN7EXAMPLE"))
+        assertTrue(text.contains("bucket"))
+    }
 
     @Test
     fun `config stores all fields correctly`() {

@@ -26,6 +26,20 @@ class SettingsManager(context: Context) {
         const val THEME_LIGHT = "light"
         const val THEME_DARK = "dark"
 
+        @Volatile
+        private var instance: SettingsManager? = null
+
+        /**
+         * Building EncryptedSharedPreferences (Keystore + Tink keyset) is slow, and it used to
+         * happen in the Application, the activity, every gallery-sync worker run and on the main
+         * thread each time the content observer fired. One shared instance also keeps the
+         * configuration flows consistent between those callers.
+         */
+        fun getInstance(context: Context): SettingsManager =
+            instance ?: synchronized(this) {
+                instance ?: SettingsManager(context.applicationContext).also { instance = it }
+            }
+
         // Legacy keys (pre-multi-profile)
         private const val LEGACY_KEY_ACCESS_KEY = "access_key_id"
         private const val LEGACY_KEY_SECRET_KEY = "secret_access_key"

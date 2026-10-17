@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +60,8 @@ fun ImageGalleryDialog(
     var currentScale by remember { mutableFloatStateOf(1f) }
     var retryTrigger by remember { mutableIntStateOf(0) }
 
-    val repository = remember(config) { S3Repository(config) }
+    val context = LocalContext.current
+    val repository = remember(config) { S3Repository.forCurrentProfile(context, config) }
 
     // Pre-load current page and adjacent pages
     LaunchedEffect(pagerState.settledPage, retryTrigger) {

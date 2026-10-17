@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +43,8 @@ fun ImagePreviewDialog(
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val repository = remember(config) { S3Repository(config) }
+    val context = LocalContext.current
+    val repository = remember(config) { S3Repository.forCurrentProfile(context, config) }
 
     LaunchedEffect(imageKey) {
         isLoading = true

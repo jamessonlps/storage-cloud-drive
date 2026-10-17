@@ -25,12 +25,25 @@ interface SyncedFileDao {
     )
     suspend fun resetStuckUploading(profileName: String, bucket: String)
 
+    /**
+     * Marks many files as UPLOADING in one statement. Callers must keep [ids] under SQLite's
+     * bound-variable limit (999 on older Android versions): see GallerySyncWorker, which chunks.
+     */
+    @Query("UPDATE synced_files SET syncStatus = 'UPLOADING' WHERE id IN (:ids)")
+    suspend fun markUploading(ids: List<Long>)
+
     @Query(
         """SELECT * FROM synced_files
         WHERE profileName = :profileName AND s3Bucket = :bucket AND syncStatus = 'FAILED'
         ORDER BY dateModified ASC"""
     )
     suspend fun getFailedFiles(profileName: String, bucket: String): List<SyncedFileEntity>
+
+    @Query(
+        """SELECT s3Key FROM synced_files
+        WHERE profileName = :profileName AND s3Bucket = :bucket"""
+    )
+    suspend fun getTrackedS3Keys(profileName: String, bucket: String): List<String>
 
     @Query(
         """SELECT mediaStoreId FROM synced_files

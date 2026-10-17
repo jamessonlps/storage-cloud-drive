@@ -51,7 +51,7 @@ fun VideoPreviewDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var tempFile by remember { mutableStateOf<File?>(null) }
 
-    val repository = remember(config) { S3Repository(config) }
+    val repository = remember(config) { S3Repository.forCurrentProfile(context, config) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()
@@ -61,14 +61,13 @@ fun VideoPreviewDialog(
         isLoading = true
         error = null
         try {
-            val bytes = withContext(Dispatchers.IO) {
-                repository.downloadFileAsBytes(videoKey)
-            }
             val file = File(context.cacheDir, "video_preview_${videoKey.hashCode()}.tmp")
-            withContext(Dispatchers.IO) {
-                file.writeBytes(bytes)
-            }
+            // Registered before the download so a failed or cancelled one is still cleaned up.
             tempFile = file
+            // Streamed straight to disk: no full-size byte array held in memory.
+            withContext(Dispatchers.IO) {
+                repository.downloadFile(videoKey, file)
+            }
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true

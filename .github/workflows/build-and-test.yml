@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -25,29 +25,30 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: bash .github/scripts/gradle-annotate.sh assembleDebug
 
       - name: Run unit tests
-        run: ./gradlew test
+        run: bash .github/scripts/gradle-annotate.sh test
 
       - name: Upload test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
           path: app/build/reports/tests/
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         if: always()
+        continue-on-error: true
         with:
           files: ./app/build/reports/coverage.xml
 
       - name: Build release APK
-        run: ./gradlew assembleRelease
+        run: bash .github/scripts/gradle-annotate.sh assembleRelease
 
       - name: Upload APK artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: app/build/outputs/apk/release/
@@ -60,7 +61,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -70,10 +71,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run lint checks
-        run: ./gradlew lint
+        run: bash .github/scripts/gradle-annotate.sh lint
 
       - name: Upload lint results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: lint-results
@@ -87,7 +88,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -101,7 +102,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload detekt results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: detekt-results

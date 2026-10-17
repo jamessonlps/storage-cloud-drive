@@ -10,9 +10,11 @@ import com.clouddrive.s3.S3Repository
 import com.clouddrive.s3.SettingsManager
 import com.clouddrive.service.ACTION_TRANSFER_COMPLETE
 import com.clouddrive.service.TransferService
+import com.clouddrive.util.FileNames
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -164,7 +166,13 @@ object TransferManager {
         updateState(id, TransferState.CANCELLED)
     }
 
-    fun retry(id: String, config: S3Config, context: Context) {
+    fun retry(
+        id: String,
+        config: S3Config,
+        context: Context,
+        settingsManager: SettingsManager? = null,
+        profileName: String? = null,
+    ) {
         val item = _transfers.value.find { it.id == id } ?: return
         val retryItem = item.copy(
             state = TransferState.QUEUED,
@@ -175,7 +183,9 @@ object TransferManager {
         )
         _transfers.update { list -> list.map { if (it.id == id) retryItem else it } }
         TransferService.ensureRunning(context)
-        launchItem(retryItem, config, context)
+        // Without the settings the upload would silently go out unencrypted, so they must be
+        // passed along on every retry path.
+        launchItem(retryItem, config, context, settingsManager, profileName)
     }
 
     fun remove(id: String) {
@@ -222,7 +232,9 @@ object TransferManager {
         profileName: String? = null,
     ) {
         val sem = if (item.type == TransferType.DELETE) deleteSemaphore else transferSemaphore
-        val job = scope.launch {
+        // LAZY: the job must be in `jobs` before it can run and remove itself in its finally block,
+        // otherwise a fast transfer left a finished job in the map forever.
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             sem.acquire()
             try {
                 // Check if item was paused/cancelled while waiting for semaphore
@@ -246,10 +258,12 @@ object TransferManager {
             } finally {
                 sem.release()
                 jobs.remove(item.id)
-                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE))
+                // Restricted to this app: the receiver is not exported.
+                context.sendBroadcast(Intent(ACTION_TRANSFER_COMPLETE).setPackage(context.packageName))
             }
         }
         jobs[item.id] = job
+        job.start()
     }
 
     private fun updateState(id: String, state: TransferState, error: String? = null) {
@@ -396,31 +410,42 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
-        val repository = S3Repository(config)
+        val repository = S3Repository(
+            config,
+            if (settingsManager != null) EncryptionManager.keyProviderFor(settingsManager, profileName) else null,
+        )
         var currentRetry = 0
 
         while (true) {
             try {
                 updateState(item.id, TransferState.DOWNLOADING)
 
-                val dest = File(
+                val downloadsDir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    "CloudDriveS3/${item.fileName}",
+                    "CloudDriveS3",
                 )
-                repository.downloadFile(item.s3Key, dest)
+                downloadsDir.mkdirs()
+                // The name comes from an S3 key: never trust it to stay inside downloadsDir.
+                val dest = FileNames.resolveInside(downloadsDir, item.fileName)
+                // Unique per transfer: two keys with the same file name can download in parallel.
+                val partial = File(dest.parentFile, "${dest.name}.${item.id.take(8)}.part")
 
-                if (settingsManager != null && profileName != null) {
-                    try {
-                        val metadata = repository.headObject(item.s3Key)
-                        if (metadata["encrypted"] == "true") {
-                            val key = EncryptionManager.getOrCreateKey(settingsManager, profileName)
-                            val encryptedBytes = dest.readBytes()
-                            val decryptedBytes = EncryptionManager.decrypt(encryptedBytes, key)
-                            dest.writeBytes(decryptedBytes)
-                        }
-                    } catch (_: Exception) {
-                        // If decryption fails, keep the file as-is
+                try {
+                    // Streamed to a temporary file so an interrupted or failed download never
+                    // leaves a half-written (or still encrypted) file under the final name.
+                    // Decrypted by the repository when the object was uploaded encrypted. A
+                    // missing key or a bad tag (wrong key / tampered data) throws and fails the
+                    // transfer instead of silently delivering ciphertext as if it were the file.
+                    repository.downloadFile(item.s3Key, partial)
+
+                    if (dest.exists() && !dest.delete()) {
+                        throw java.io.IOException("Nao foi possivel substituir o arquivo existente")
                     }
+                    if (!partial.renameTo(dest)) {
+                        throw java.io.IOException("Nao foi possivel finalizar o arquivo baixado")
+                    }
+                } finally {
+                    partial.delete()
                 }
 
                 updateProgress(item.id, item.totalBytes)

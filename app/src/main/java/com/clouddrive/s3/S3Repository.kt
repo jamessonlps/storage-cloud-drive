@@ -1,5 +1,6 @@
 package com.clouddrive.s3
 
+import android.content.Context
 import aws.sdk.kotlin.services.s3.model.AbortMultipartUploadRequest
 import aws.sdk.kotlin.services.s3.model.CompleteMultipartUploadRequest
 import aws.sdk.kotlin.services.s3.model.CompletedMultipartUpload
@@ -14,12 +15,15 @@ import aws.sdk.kotlin.services.s3.model.PutObjectRequest
 import aws.sdk.kotlin.services.s3.model.UploadPartRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
+import aws.smithy.kotlin.runtime.content.writeToFile
+import com.clouddrive.crypto.EncryptionManager
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import java.io.File
 import java.io.InputStream
 import java.text.DecimalFormat
+import javax.crypto.SecretKey
 
 data class S3FileItem(
     val key: String,
@@ -49,10 +53,40 @@ data class PagedResult(
     val nextToken: String?,
 )
 
-class S3Repository(private val config: S3Config) {
+class S3Repository(
+    private val config: S3Config,
+    /**
+     * Supplies the AES key of the profile in use. Objects uploaded with client-side encryption
+     * carry the user metadata `encrypted=true` and are decrypted by every download method; before,
+     * only the explicit "download" action did, so previews and thumbnails of encrypted files
+     * showed raw ciphertext.
+     */
+    private val keyProvider: (() -> SecretKey?)? = null,
+) {
+
+    companion object {
+        private const val ENCRYPTED_METADATA_KEY = "encrypted"
+
+        /** Repository for the profile currently selected in the app, able to read encrypted files. */
+        fun forCurrentProfile(context: Context, config: S3Config): S3Repository {
+            val settings = SettingsManager.getInstance(context)
+            return S3Repository(
+                config,
+                EncryptionManager.keyProviderFor(settings, settings.getCurrentProfileName()),
+            )
+        }
+    }
 
     private val client get() = S3ClientProvider.getClient(config)
     private val bucket get() = config.bucketName
+
+    private fun decryptIfNeeded(bytes: ByteArray, metadata: Map<String, String>): ByteArray {
+        if (metadata[ENCRYPTED_METADATA_KEY] != "true") return bytes
+        val key = keyProvider?.invoke()
+            ?: throw IllegalStateException("Arquivo criptografado: chave de criptografia indisponivel neste perfil")
+        // A wrong key or tampered data fails the GCM tag check and throws.
+        return EncryptionManager.decrypt(bytes, key)
+    }
 
     suspend fun listFiles(prefix: String = ""): List<S3FileItem> {
         val request = ListObjectsV2Request {
@@ -241,22 +275,35 @@ class S3Repository(private val config: S3Config) {
             this.key = key
         }
         var result: ByteArray? = null
+        var metadata: Map<String, String> = emptyMap()
         client.getObject(request) { response ->
+            metadata = response.metadata ?: emptyMap()
             result = response.body?.toByteArray()
         }
-        return result ?: throw Exception("Arquivo vazio ou nao encontrado")
+        val bytes = result ?: throw Exception("Arquivo vazio ou nao encontrado")
+        return decryptIfNeeded(bytes, metadata)
     }
 
-    suspend fun downloadFile(key: String, destinationFile: File) {
+    /**
+     * Streams the object straight into [destinationFile] instead of buffering the whole body in
+     * memory first (large videos used to need 2x their size in RAM). Returns the object's user
+     * metadata, so callers can check markers such as "encrypted" without an extra HeadObject call.
+     */
+    suspend fun downloadFile(key: String, destinationFile: File): Map<String, String> {
         val request = GetObjectRequest {
             this.bucket = this@S3Repository.bucket
             this.key = key
         }
+        destinationFile.parentFile?.mkdirs()
+        var metadata: Map<String, String> = emptyMap()
         client.getObject(request) { response ->
-            val bytes = response.body?.toByteArray() ?: return@getObject
-            destinationFile.parentFile?.mkdirs()
-            destinationFile.writeBytes(bytes)
+            metadata = response.metadata ?: emptyMap()
+            response.body?.writeToFile(destinationFile)
         }
+        if (metadata[ENCRYPTED_METADATA_KEY] == "true") {
+            destinationFile.writeBytes(decryptIfNeeded(destinationFile.readBytes(), metadata))
+        }
+        return metadata
     }
 
     suspend fun downloadFileBytes(key: String): ByteArray {
@@ -265,10 +312,12 @@ class S3Repository(private val config: S3Config) {
             this.key = key
         }
         var result = byteArrayOf()
+        var metadata: Map<String, String> = emptyMap()
         client.getObject(request) { response ->
+            metadata = response.metadata ?: emptyMap()
             result = response.body?.toByteArray() ?: byteArrayOf()
         }
-        return result
+        return decryptIfNeeded(result, metadata)
     }
 
     suspend fun headObject(key: String): Map<String, String> {
