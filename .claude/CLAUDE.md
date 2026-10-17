@@ -40,9 +40,9 @@ The codebase follows a **layered architecture** with clear separation of concern
 ### Layers
 
 1. **Data Layer** (`s3/`)
-   - `S3ClientProvider.kt` - Singleton that manages the AWS S3Client (cached)
-   - `S3Repository.kt` - CRUD operations: list objects, upload, download, delete
-   - `SettingsManager.kt` - Persists AWS credentials via DataStore (secure local storage)
+   - `S3ClientProvider.kt` - Singleton that manages the AWS S3Client, cached per credentials + region (the bucket is part of each request, so switching buckets reuses the client). `clientFactory` is replaceable because the real client cannot start in local unit tests
+   - `S3Repository.kt` - CRUD operations: list objects, upload, download, delete. Every download method decrypts objects tagged `encrypted=true`; build it with `S3Repository.forCurrentProfile(context, config)` anywhere files are read (previews, thumbnails)
+   - `SettingsManager.kt` - Persists profiles, AWS credentials and the encryption key in EncryptedSharedPreferences. Use `SettingsManager.getInstance(context)`: building it is slow (Keystore) and one shared instance keeps its flows consistent
    - `S3Config.kt` - Data class for AWS configuration (accessKeyId, secretAccessKey, region, bucketName)
 
 2. **Service Layer** (`service/`)
@@ -104,7 +104,10 @@ All S3 operations are suspend functions in `S3Repository`. UI calls happen via `
 ### Security Notes
 
 - **No Cleartext Traffic**: `usesCleartextTraffic=false` in Manifest ensures HTTPS only
-- **Credentials Storage**: DataStore is encrypted by default (backed by EncryptedSharedPreferences on supported devices)
+- **Credentials Storage**: EncryptedSharedPreferences (AES-256, Android Keystore master key); `S3Config.toString()` masks the keys so they cannot leak into logs
+- **Untrusted names**: file names from share intents, the file picker and S3 keys go through `util/FileNames` before becoming an S3 key or a local path (no path traversal)
+- **Biometric lock**: required again after 30 s in the background; `FLAG_SECURE` is set while it is enabled
+- **Cache hygiene**: `util/CacheCleaner` deletes leftover preview files at startup and caps the thumbnail cache
 - **Password Toggle**: Secret Access Key uses `PasswordVisualTransformation` UI for visibility control
 - **IAM Permissions**: Users need S3 ListBucket, GetObject, PutObject, DeleteObject on their bucket
 
@@ -138,6 +141,9 @@ All S3 operations are suspend functions in `S3Repository`. UI calls happen via `
 5. **File Type Icons**: Icons determined by file extension (image, video, audio, document)
 
 ## Testing Considerations
+
+- **CI**: `.github/workflows/build-and-test.yml` runs `assembleDebug`, `test`, `assembleRelease` and `lint` through `.github/scripts/gradle-annotate.sh`, which publishes compiler errors, failed tests (with stack traces) and lint errors as check annotations - job logs are not downloadable through the API
+- **Unit tests**: do not create a real `S3Client` in a local test (NullPointerException from the SDK reading `Build.VERSION`); use the `S3ClientProvider.clientFactory` hook or mock the client
 
 - **Manual Testing**: Connect Android device or emulator (API 26+), configure S3 credentials in app settings
 - **Emulator S3 Access**: Use real AWS credentials in settings; emulator can reach AWS with internet connectivity
