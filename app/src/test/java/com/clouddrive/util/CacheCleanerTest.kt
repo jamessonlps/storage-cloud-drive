@@ -78,4 +78,20 @@ class CacheCleanerTest {
         assertFalse(stale.exists())
         assertTrue(active.exists())
     }
+
+    @Test
+    fun `run removes stale download staging and upload spool files`() {
+        val cache = tmp.newFolder("cache")
+        val downloads = File(cache, CacheCleaner.DOWNLOAD_DIR).also { it.mkdirs() }
+        val spool = File(cache, CacheCleaner.UPLOAD_SPOOL_DIR).also { it.mkdirs() }
+        val staleDownload = file(downloads, "a.part", 10, 1_000)
+        val staleSpool = file(spool, "b.spool", 10, 1_000)
+        val activeDownload = file(downloads, "c.part", 10, System.currentTimeMillis())
+
+        CacheCleaner.run(cache)
+
+        assertFalse(staleDownload.exists())
+        assertFalse(staleSpool.exists())
+        assertTrue(activeDownload.exists())
+    }
 }

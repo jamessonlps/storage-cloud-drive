@@ -3,15 +3,16 @@ package com.clouddrive.transfer
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Environment
+import com.clouddrive.crypto.ChunkedEncryption
 import com.clouddrive.crypto.EncryptionManager
 import com.clouddrive.s3.S3Config
 import com.clouddrive.s3.S3Repository
 import com.clouddrive.s3.SettingsManager
 import com.clouddrive.service.ACTION_TRANSFER_COMPLETE
 import com.clouddrive.service.TransferService
+import com.clouddrive.util.CacheCleaner
+import com.clouddrive.util.DownloadsStore
 import com.clouddrive.util.FileNames
-import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import java.io.File
+import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 
 object TransferManager {
@@ -306,101 +308,136 @@ object TransferManager {
         val encryptionEnabled = settingsManager != null && profileName != null &&
             EncryptionManager.isEnabled(settingsManager, profileName)
 
-        while (true) {
-            try {
-                updateState(item.id, TransferState.UPLOADING)
+        // Only created when the source cannot tell its size; reused by retries, always removed.
+        var spool: File? = null
+        try {
+            while (true) {
+                try {
+                    updateState(item.id, TransferState.UPLOADING)
 
-                val uri = Uri.parse(item.sourceUri)
-                val rawStream = context.contentResolver.openInputStream(uri)
-                    ?: throw Exception("Nao foi possivel ler o arquivo")
-
-                rawStream.use { stream ->
-                    if (encryptionEnabled) {
-                        val key = EncryptionManager.getOrCreateKey(settingsManager!!, profileName!!)
-                        val plainBytes = stream.readBytes()
-                        val encryptedBytes = EncryptionManager.encrypt(plainBytes, key)
-                        val encryptedSize = encryptedBytes.size.toLong()
-                        val metadata = mapOf("encrypted" to "true")
-                        val encStream = ByteArrayInputStream(encryptedBytes)
-
-                        if (encryptedSize > MULTIPART_THRESHOLD) {
-                            val totalParts = ((encryptedSize + PART_SIZE - 1) / PART_SIZE).toInt()
-                            _transfers.update { list -> list.map {
-                                if (it.id == item.id) it.copy(totalParts = totalParts) else it
-                            } }
-                            repository.uploadMultipart(
-                                key = item.s3Key,
-                                inputStream = encStream,
-                                contentType = item.contentType,
-                                totalSize = encryptedSize,
-                                partSizeBytes = PART_SIZE,
-                                metadata = metadata,
-                            ) { _, completedPartsCount, bytesTransferred ->
-                                updateMultipartProgress(item.id, completedPartsCount, bytesTransferred)
-                            }
-                        } else {
-                            repository.uploadFileWithProgress(
-                                key = item.s3Key,
-                                inputStream = encStream,
-                                contentType = item.contentType,
-                                totalSize = encryptedSize,
-                                metadata = metadata,
-                            ) { bytesTransferred ->
-                                updateProgress(item.id, bytesTransferred)
-                            }
+                    val uri = Uri.parse(item.sourceUri)
+                    var plainSize = item.totalBytes
+                    if (plainSize <= 0L) {
+                        // Some providers report 0/unknown. The size decides single vs multipart and
+                        // the number of parts, so find the real one instead of reading it all in RAM.
+                        plainSize = spool?.length() ?: querySize(context, uri)
+                        if (plainSize <= 0L) {
+                            val copy = spool ?: spoolToCache(context, uri, item.id).also { spool = it }
+                            plainSize = copy.length()
                         }
-                    } else {
-                        if (item.totalBytes > MULTIPART_THRESHOLD) {
-                            val totalParts = ((item.totalBytes + PART_SIZE - 1) / PART_SIZE).toInt()
+                        updateTotalBytes(item.id, plainSize)
+                    }
+
+                    val rawStream = spool?.inputStream()
+                        ?: context.contentResolver.openInputStream(uri)
+                        ?: throw Exception("Nao foi possivel ler o arquivo")
+
+                    rawStream.use { stream ->
+                        val body: InputStream
+                        val size: Long
+                        val metadata: Map<String, String>?
+                        if (encryptionEnabled) {
+                            val key = EncryptionManager.getOrCreateKey(settingsManager!!, profileName!!)
+                            // Encrypted on the fly, chunk by chunk: memory use does not depend on the file size.
+                            body = ChunkedEncryption.encryptingStream(stream, key)
+                            size = ChunkedEncryption.encryptedSize(plainSize)
+                            metadata = mapOf(
+                                "encrypted" to "true",
+                                ChunkedEncryption.METADATA_KEY to ChunkedEncryption.METADATA_VALUE,
+                            )
+                        } else {
+                            body = stream
+                            size = plainSize
+                            metadata = null
+                        }
+
+                        if (size > MULTIPART_THRESHOLD) {
+                            val totalParts = ((size + PART_SIZE - 1) / PART_SIZE).toInt()
                             _transfers.update { list -> list.map {
                                 if (it.id == item.id) it.copy(totalParts = totalParts) else it
                             } }
                             repository.uploadMultipart(
                                 key = item.s3Key,
-                                inputStream = stream,
+                                inputStream = body,
                                 contentType = item.contentType,
-                                totalSize = item.totalBytes,
+                                totalSize = size,
                                 partSizeBytes = PART_SIZE,
+                                metadata = metadata,
                             ) { _, completedPartsCount, bytesTransferred ->
                                 updateMultipartProgress(item.id, completedPartsCount, bytesTransferred)
                             }
                         } else {
                             repository.uploadFileWithProgress(
                                 key = item.s3Key,
-                                inputStream = stream,
+                                inputStream = body,
                                 contentType = item.contentType,
-                                totalSize = item.totalBytes,
+                                totalSize = size,
+                                metadata = metadata,
                             ) { bytesTransferred ->
                                 updateProgress(item.id, bytesTransferred)
                             }
                         }
                     }
-                }
 
-                updateProgress(item.id, item.totalBytes)
-                updateState(item.id, TransferState.COMPLETED)
-                return
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (RetryPolicy.shouldRetry(e, currentRetry)) {
-                    currentRetry++
-                    _transfers.update { list -> list.map {
-                        if (it.id == item.id) it.copy(
-                            retryCount = currentRetry,
-                            state = TransferState.RETRYING,
-                            errorMessage = "Tentativa $currentRetry de ${item.maxRetries}",
-                            transferredBytes = 0,
-                            completedParts = 0,
-                        ) else it
-                    } }
-                    delay(RetryPolicy.delayMs(currentRetry))
-                } else {
-                    updateState(item.id, TransferState.FAILED, e.message ?: "Erro desconhecido")
+                    updateProgress(item.id, _transfers.value.find { it.id == item.id }?.totalBytes ?: plainSize)
+                    updateState(item.id, TransferState.COMPLETED)
                     return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (RetryPolicy.shouldRetry(e, currentRetry)) {
+                        currentRetry++
+                        _transfers.update { list -> list.map {
+                            if (it.id == item.id) it.copy(
+                                retryCount = currentRetry,
+                                state = TransferState.RETRYING,
+                                errorMessage = "Tentativa $currentRetry de ${item.maxRetries}",
+                                transferredBytes = 0,
+                                completedParts = 0,
+                            ) else it
+                        } }
+                        delay(RetryPolicy.delayMs(currentRetry))
+                    } else {
+                        updateState(item.id, TransferState.FAILED, e.message ?: "Erro desconhecido")
+                        return
+                    }
                 }
             }
+        } finally {
+            spool?.delete()
         }
+    }
+
+    private fun updateTotalBytes(id: String, totalBytes: Long) {
+        _transfers.update { list -> list.map {
+            if (it.id == id) it.copy(totalBytes = totalBytes) else it
+        } }
+    }
+
+    /** Length reported by the provider's file descriptor, or -1 when it does not know. */
+    private fun querySize(context: Context, uri: Uri): Long {
+        return try {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { fd ->
+                if (fd.length >= 0) fd.length else -1L
+            } ?: -1L
+        } catch (_: Exception) {
+            -1L
+        }
+    }
+
+    /** Copies the source to a temporary file so its real length is known (streamed, not buffered). */
+    private fun spoolToCache(context: Context, uri: Uri, id: String): File {
+        val dir = File(context.cacheDir, CacheCleaner.UPLOAD_SPOOL_DIR).also { it.mkdirs() }
+        val file = File(dir, "$id.spool")
+        try {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: throw java.io.IOException("Nao foi possivel ler o arquivo")
+            input.use { src -> file.outputStream().use { out -> src.copyTo(out) } }
+        } catch (e: Exception) {
+            file.delete()
+            throw e
+        }
+        return file
     }
 
     private suspend fun executeDownload(
@@ -420,30 +457,20 @@ object TransferManager {
             try {
                 updateState(item.id, TransferState.DOWNLOADING)
 
-                val downloadsDir = File(
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    "CloudDriveS3",
-                )
-                downloadsDir.mkdirs()
-                // The name comes from an S3 key: never trust it to stay inside downloadsDir.
-                val dest = FileNames.resolveInside(downloadsDir, item.fileName)
+                // Staged in app-private storage, then published to Downloads (MediaStore on
+                // Android 10+). The name comes from an S3 key: sanitized, never used as a path.
+                val displayName = FileNames.sanitize(item.fileName)
+                    ?: throw IllegalArgumentException("Nome de arquivo invalido")
+                val stagingDir = File(context.cacheDir, CacheCleaner.DOWNLOAD_DIR).also { it.mkdirs() }
                 // Unique per transfer: two keys with the same file name can download in parallel.
-                val partial = File(dest.parentFile, "${dest.name}.${item.id.take(8)}.part")
+                val partial = File(stagingDir, "${item.id}${CacheCleaner.PARTIAL_SUFFIX}")
 
                 try {
-                    // Streamed to a temporary file so an interrupted or failed download never
-                    // leaves a half-written (or still encrypted) file under the final name.
-                    // Decrypted by the repository when the object was uploaded encrypted. A
-                    // missing key or a bad tag (wrong key / tampered data) throws and fails the
-                    // transfer instead of silently delivering ciphertext as if it were the file.
+                    // Decrypted by the repository when the object was uploaded encrypted. A missing
+                    // key or a bad tag (wrong key / tampered data) throws and fails the transfer
+                    // instead of silently delivering ciphertext as if it were the file.
                     repository.downloadFile(item.s3Key, partial)
-
-                    if (dest.exists() && !dest.delete()) {
-                        throw java.io.IOException("Nao foi possivel substituir o arquivo existente")
-                    }
-                    if (!partial.renameTo(dest)) {
-                        throw java.io.IOException("Nao foi possivel finalizar o arquivo baixado")
-                    }
+                    DownloadsStore.publish(context, partial, displayName)
                 } finally {
                     partial.delete()
                 }
