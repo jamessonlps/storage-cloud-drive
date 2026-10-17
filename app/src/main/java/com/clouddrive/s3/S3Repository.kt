@@ -14,6 +14,7 @@ import aws.sdk.kotlin.services.s3.model.PutObjectRequest
 import aws.sdk.kotlin.services.s3.model.UploadPartRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
+import aws.smithy.kotlin.runtime.content.writeToFile
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -247,16 +248,23 @@ class S3Repository(private val config: S3Config) {
         return result ?: throw Exception("Arquivo vazio ou nao encontrado")
     }
 
-    suspend fun downloadFile(key: String, destinationFile: File) {
+    /**
+     * Streams the object straight into [destinationFile] instead of buffering the whole body in
+     * memory first (large videos used to need 2x their size in RAM). Returns the object's user
+     * metadata, so callers can check markers such as "encrypted" without an extra HeadObject call.
+     */
+    suspend fun downloadFile(key: String, destinationFile: File): Map<String, String> {
         val request = GetObjectRequest {
             this.bucket = this@S3Repository.bucket
             this.key = key
         }
+        destinationFile.parentFile?.mkdirs()
+        var metadata: Map<String, String> = emptyMap()
         client.getObject(request) { response ->
-            val bytes = response.body?.toByteArray() ?: return@getObject
-            destinationFile.parentFile?.mkdirs()
-            destinationFile.writeBytes(bytes)
+            metadata = response.metadata ?: emptyMap()
+            response.body?.writeToFile(destinationFile)
         }
+        return metadata
     }
 
     suspend fun downloadFileBytes(key: String): ByteArray {

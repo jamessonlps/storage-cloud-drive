@@ -5,7 +5,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.clouddrive.CloudDriveApp
 import com.clouddrive.s3.SettingsManager
-import com.clouddrive.sync.db.SyncStatus
 import com.clouddrive.sync.db.SyncedFileEntity
 import com.clouddrive.transfer.TransferItem
 import com.clouddrive.transfer.TransferManager
@@ -103,9 +102,11 @@ class GallerySyncWorker(
     ) {
         val batchId = "gallery-sync-${UUID.randomUUID()}"
 
-        // Mark as uploading in Room
-        files.forEach { file ->
-            dao.updateStatus(file.id, SyncStatus.UPLOADING)
+        // Mark as uploading in Room: a handful of statements instead of one transaction per
+        // file (a first sync can have thousands of photos). Chunked to stay under SQLite's
+        // bound-variable limit.
+        files.map { it.id }.chunked(500).forEach { ids ->
+            dao.markUploading(ids)
         }
 
         val transferItems = files.map { file ->

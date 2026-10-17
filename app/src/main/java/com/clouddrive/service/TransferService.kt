@@ -17,7 +17,9 @@ import com.clouddrive.transfer.TransferType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
 class TransferService : Service() {
@@ -26,6 +28,10 @@ class TransferService : Service() {
         const val CHANNEL_ID = "transfer_channel"
         const val COMPLETE_CHANNEL_ID = "transfer_complete_channel"
         const val EXTRA_OPEN_TRANSFERS = "open_transfers"
+
+        // Progress changes arrive many times per second. Android drops notification updates sent
+        // that fast, and each one re-grouped the whole transfer list on the main thread.
+        private const val NOTIFICATION_THROTTLE_MS = 500L
 
         fun ensureRunning(context: Context) {
             val intent = Intent(context, TransferService::class.java)
@@ -50,9 +56,12 @@ class TransferService : Service() {
         return START_NOT_STICKY
     }
 
+    @OptIn(FlowPreview::class)
     private fun observeTransfers() {
         serviceScope.launch {
-            TransferManager.transfers.collect { items ->
+            // sample() always delivers the latest state, so a batch that finishes between two
+            // ticks is still seen as finished and gets its completion notification.
+            TransferManager.transfers.sample(NOTIFICATION_THROTTLE_MS).collect { items ->
                 if (items.isEmpty()) return@collect
 
                 // Group by batchId

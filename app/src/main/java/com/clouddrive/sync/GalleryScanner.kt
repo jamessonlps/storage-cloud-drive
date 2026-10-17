@@ -57,10 +57,12 @@ object GalleryScanner {
     ): List<SyncedFileEntity> {
         val dao = db.syncedFileDao()
         val tracked = dao.getTrackedMediaStoreIds(profileName, bucket).toSet()
+        // Set lookup: this check runs once per photo/video on the device.
+        val enabled = enabledFolders.toSet()
         val newFiles = mutableListOf<SyncedFileEntity>()
 
         val collector = { info: MediaFileInfo ->
-            if (info.mediaStoreId !in tracked && info.folderName in enabledFolders) {
+            if (info.mediaStoreId !in tracked && info.folderName in enabled) {
                 newFiles.add(
                     SyncedFileEntity(
                         mediaStoreId = info.mediaStoreId,

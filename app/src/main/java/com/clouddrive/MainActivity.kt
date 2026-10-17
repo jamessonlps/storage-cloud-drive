@@ -3,7 +3,9 @@ package com.clouddrive
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -77,12 +79,44 @@ import com.clouddrive.ui.SettingsScreen
 import com.clouddrive.ui.SettingsSection
 import com.clouddrive.ui.TransferQueueScreen
 import com.clouddrive.ui.theme.CloudDriveTheme
+import com.clouddrive.util.FileNames
 
 enum class Screen { Home, Settings, Transfers, GallerySync }
+
+/** How long the app may stay in the background before the biometric lock is required again. */
+private const val RELOCK_AFTER_MS = 30_000L
 
 class MainActivity : FragmentActivity() {
 
     private val pendingTransfersScreen = mutableStateOf(false)
+
+    // Hoisted out of the composition so the app can be locked again after time in the background.
+    private val isAuthenticatedState = mutableStateOf(false)
+    private var stoppedAtMs = 0L
+
+    // Created once and shared with the UI: building EncryptedSharedPreferences touches the Keystore.
+    private val lockSettings by lazy { SettingsManager(applicationContext) }
+
+    override fun onStart() {
+        super.onStart()
+        val biometricEnabled = lockSettings.isBiometricEnabled()
+        // With the lock enabled, keep content out of screenshots and the recent-apps thumbnail.
+        if (biometricEnabled) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        if (biometricEnabled && isAuthenticatedState.value && stoppedAtMs != 0L &&
+            SystemClock.elapsedRealtime() - stoppedAtMs > RELOCK_AFTER_MS
+        ) {
+            isAuthenticatedState.value = false
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stoppedAtMs = SystemClock.elapsedRealtime()
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -100,16 +134,17 @@ class MainActivity : FragmentActivity() {
             pendingTransfersScreen.value = true
         }
 
-        val settingsManager = SettingsManager(applicationContext)
+        val settingsManager = lockSettings
 
         setContent {
             var themeMode by remember { mutableStateOf(settingsManager.getThemeMode()) }
 
             CloudDriveTheme(themeMode = themeMode) {
-                var isAuthenticated by remember { mutableStateOf(false) }
+                var isAuthenticated by isAuthenticatedState
 
-                // Check biometric on launch
-                LaunchedEffect(Unit) {
+                // Check biometric on launch, and again every time the app gets locked
+                LaunchedEffect(isAuthenticated) {
+                    if (isAuthenticated) return@LaunchedEffect
                     if (!settingsManager.isBiometricEnabled()) {
                         isAuthenticated = true
                     } else {
@@ -517,12 +552,17 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        if (uris.isEmpty()) return
+        // Any app can send us this intent, so only accept what the sender is really sharing.
+        val safeUris = uris.filter { isSafeShareUri(it) }
+        if (safeUris.isEmpty()) return
         shareIntentHandled = true
 
         val batchId = java.util.UUID.randomUUID().toString()
-        val items = uris.map { uri ->
-            val fileName = getShareFileName(uri) ?: "arquivo_${System.currentTimeMillis()}"
+        val items = safeUris.map { uri ->
+            // The display name is chosen by the sending app and becomes the S3 key: keep it a
+            // plain file name so it cannot inject a path or overwrite objects elsewhere.
+            val fileName = FileNames.sanitize(getShareFileName(uri))
+                ?: "arquivo_${System.currentTimeMillis()}"
             val fileSize = getShareFileSize(uri)
             val contentType = contentResolver.getType(uri)
             TransferItem(
@@ -538,7 +578,14 @@ class MainActivity : FragmentActivity() {
         }
         TransferManager.enqueueBatch(items, config, this, settingsManager, profileName)
 
-        Toast.makeText(this, "Upload iniciado: ${uris.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Upload iniciado: ${safeUris.size} arquivo(s)", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun isSafeShareUri(uri: Uri): Boolean {
+        // file:// URIs would let another app make us read our own private files; our own
+        // FileProvider is never a legitimate share source either.
+        if (uri.scheme != "content") return false
+        return uri.authority != "$packageName.fileprovider"
     }
 
     private fun getShareFileName(uri: Uri): String? {

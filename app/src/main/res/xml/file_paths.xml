@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-path name="downloads" path="Download/CloudDriveS3" />
-    <cache-path name="cache" path="." />
+    <!-- Only the "shared" subfolder of the cache: the rest of the cache holds temporary
+         previews and thumbnails that must never be reachable through this provider. -->
+    <cache-path name="cache" path="shared/" />
 </paths>

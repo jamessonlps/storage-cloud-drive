@@ -107,14 +107,13 @@ fun AudioPreviewDialog(
         isLoading = true
         error = null
         try {
-            val bytes = withContext(Dispatchers.IO) {
-                repository.downloadFileAsBytes(audioKey)
-            }
             val file = File(context.cacheDir, "audio_preview_${audioKey.hashCode()}.tmp")
-            withContext(Dispatchers.IO) {
-                file.writeBytes(bytes)
-            }
+            // Registered before the download so a failed or cancelled one is still cleaned up.
             tempFile = file
+            // Streamed straight to disk: no full-size byte array held in memory.
+            withContext(Dispatchers.IO) {
+                repository.downloadFile(audioKey, file)
+            }
             exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
             exoPlayer.prepare()
         } catch (e: Exception) {

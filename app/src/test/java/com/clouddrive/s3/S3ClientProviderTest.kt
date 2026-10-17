@@ -28,6 +28,13 @@ class S3ClientProviderTest {
     }
 
     @Test
+    fun `getClient reuses client when only the bucket changes`() {
+        val client1 = S3ClientProvider.getClient(S3Config("key", "secret", "us-east-1", "bucket-a"))
+        val client2 = S3ClientProvider.getClient(S3Config("key", "secret", "us-east-1", "bucket-b"))
+        assertSame(client1, client2)
+    }
+
+    @Test
     fun `getClient returns new client for different config`() {
         val config1 = S3Config("key1", "secret1", "us-east-1", "bucket1")
         val config2 = S3Config("key2", "secret2", "eu-west-1", "bucket2")

@@ -75,14 +75,13 @@ fun PdfPreviewDialog(
         isLoading = true
         error = null
         try {
-            val bytes = withContext(Dispatchers.IO) {
-                repository.downloadFileAsBytes(pdfKey)
-            }
             val file = File(context.cacheDir, "pdf_preview_${pdfKey.hashCode()}.pdf")
-            withContext(Dispatchers.IO) {
-                file.writeBytes(bytes)
-            }
+            // Registered before the download so a failed or cancelled one is still cleaned up.
             tempFile = file
+            // Streamed straight to disk: no full-size byte array held in memory.
+            withContext(Dispatchers.IO) {
+                repository.downloadFile(pdfKey, file)
+            }
             val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
             val pdfRenderer = PdfRenderer(fd)
             renderer = pdfRenderer

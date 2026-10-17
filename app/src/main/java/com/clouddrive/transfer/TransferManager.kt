@@ -10,6 +10,7 @@ import com.clouddrive.s3.S3Repository
 import com.clouddrive.s3.SettingsManager
 import com.clouddrive.service.ACTION_TRANSFER_COMPLETE
 import com.clouddrive.service.TransferService
+import com.clouddrive.util.FileNames
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -164,7 +165,13 @@ object TransferManager {
         updateState(id, TransferState.CANCELLED)
     }
 
-    fun retry(id: String, config: S3Config, context: Context) {
+    fun retry(
+        id: String,
+        config: S3Config,
+        context: Context,
+        settingsManager: SettingsManager? = null,
+        profileName: String? = null,
+    ) {
         val item = _transfers.value.find { it.id == id } ?: return
         val retryItem = item.copy(
             state = TransferState.QUEUED,
@@ -175,7 +182,9 @@ object TransferManager {
         )
         _transfers.update { list -> list.map { if (it.id == id) retryItem else it } }
         TransferService.ensureRunning(context)
-        launchItem(retryItem, config, context)
+        // Without the settings the upload would silently go out unencrypted, so they must be
+        // passed along on every retry path.
+        launchItem(retryItem, config, context, settingsManager, profileName)
     }
 
     fun remove(id: String) {
@@ -403,24 +412,42 @@ object TransferManager {
             try {
                 updateState(item.id, TransferState.DOWNLOADING)
 
-                val dest = File(
+                val downloadsDir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                    "CloudDriveS3/${item.fileName}",
+                    "CloudDriveS3",
                 )
-                repository.downloadFile(item.s3Key, dest)
+                downloadsDir.mkdirs()
+                // The name comes from an S3 key: never trust it to stay inside downloadsDir.
+                val dest = FileNames.resolveInside(downloadsDir, item.fileName)
+                // Unique per transfer: two keys with the same file name can download in parallel.
+                val partial = File(dest.parentFile, "${dest.name}.${item.id.take(8)}.part")
 
-                if (settingsManager != null && profileName != null) {
-                    try {
-                        val metadata = repository.headObject(item.s3Key)
-                        if (metadata["encrypted"] == "true") {
-                            val key = EncryptionManager.getOrCreateKey(settingsManager, profileName)
-                            val encryptedBytes = dest.readBytes()
-                            val decryptedBytes = EncryptionManager.decrypt(encryptedBytes, key)
-                            dest.writeBytes(decryptedBytes)
+                try {
+                    // Streamed to a temporary file so an interrupted or failed download never
+                    // leaves a half-written (or still encrypted) file under the final name.
+                    val metadata = repository.downloadFile(item.s3Key, partial)
+
+                    if (metadata["encrypted"] == "true") {
+                        if (settingsManager == null || profileName == null) {
+                            throw IllegalStateException("Arquivo criptografado: perfil indisponivel para descriptografar")
                         }
-                    } catch (_: Exception) {
-                        // If decryption fails, keep the file as-is
+                        val encoded = settingsManager.getEncryptionKey(profileName)
+                            ?: throw IllegalStateException("Chave de criptografia nao encontrada neste perfil")
+                        val key = EncryptionManager.keyFromBase64(encoded)
+                        // A bad tag (wrong key / tampered data) throws and fails the transfer
+                        // instead of silently delivering ciphertext as if it were the file.
+                        val decrypted = EncryptionManager.decrypt(partial.readBytes(), key)
+                        partial.writeBytes(decrypted)
                     }
+
+                    if (dest.exists() && !dest.delete()) {
+                        throw java.io.IOException("Nao foi possivel substituir o arquivo existente")
+                    }
+                    if (!partial.renameTo(dest)) {
+                        throw java.io.IOException("Nao foi possivel finalizar o arquivo baixado")
+                    }
+                } finally {
+                    partial.delete()
                 }
 
                 updateProgress(item.id, item.totalBytes)

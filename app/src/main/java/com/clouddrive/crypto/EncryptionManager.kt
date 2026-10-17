@@ -22,6 +22,14 @@ object EncryptionManager {
         return keyGen.generateKey()
     }
 
+    private val secureRandom = SecureRandom()
+
+    /**
+     * Synchronized on purpose: uploads run in parallel, and two of them racing to create the
+     * first key would each persist a different one. Files encrypted with the overwritten key
+     * could never be decrypted again.
+     */
+    @Synchronized
     fun getOrCreateKey(settingsManager: SettingsManager, profileName: String): SecretKey {
         val existing = settingsManager.getEncryptionKey(profileName)
         if (existing != null) {
@@ -34,7 +42,7 @@ object EncryptionManager {
 
     fun encrypt(plainBytes: ByteArray, key: SecretKey): ByteArray {
         val iv = ByteArray(IV_SIZE)
-        SecureRandom().nextBytes(iv)
+        secureRandom.nextBytes(iv)
 
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_SIZE, iv))
@@ -44,6 +52,9 @@ object EncryptionManager {
     }
 
     fun decrypt(encryptedBytes: ByteArray, key: SecretKey): ByteArray {
+        require(encryptedBytes.size >= IV_SIZE + TAG_SIZE / 8) {
+            "Dados criptografados invalidos ou corrompidos"
+        }
         val iv = encryptedBytes.copyOfRange(0, IV_SIZE)
         val ciphertext = encryptedBytes.copyOfRange(IV_SIZE, encryptedBytes.size)
 
