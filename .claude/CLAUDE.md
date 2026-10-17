@@ -70,12 +70,12 @@ The codebase follows a **layered architecture** with clear separation of concern
 1. **Initialization**: `CloudDriveApp` → `MainActivity` → `FileListScreen` or `SettingsScreen`
 2. **Configuration**: User fills `SettingsScreen` → credentials saved in `SettingsManager` → `S3ClientProvider` initializes
 3. **File Operations**: `FileListScreen` calls `S3Repository` → `TransferManager` for background work (uploads, downloads, deletes) → `TransferService` for foreground notification → Progress via StateFlow + BroadcastReceiver
-4. **Credentials**: Stored securely in DataStore (Android private app storage), never hardcoded
+4. **Credentials**: Stored in EncryptedSharedPreferences via `SettingsManager`, never hardcoded
 
 ### State Management
 
 - **UI State**: Compose `mutableStateOf()` for local UI state (current folder path, loading states)
-- **Persistent State**: DataStore for AWS credentials
+- **Persistent State**: `SettingsManager` (EncryptedSharedPreferences) for profiles/credentials/keys
 - **Service Communication**: BroadcastReceiver for transfer progress updates from `TransferService`
 
 ## Important File Locations
@@ -105,6 +105,10 @@ All S3 operations are suspend functions in `S3Repository`. UI calls happen via `
 
 - **No Cleartext Traffic**: `usesCleartextTraffic=false` in Manifest ensures HTTPS only
 - **Credentials Storage**: EncryptedSharedPreferences (AES-256, Android Keystore master key); `S3Config.toString()` masks the keys so they cannot leak into logs
+- **Encryption format**: new uploads use `crypto/ChunkedEncryption` (streaming AES-GCM per 64 KiB chunk, metadata `encrypted=true` + `enc-version=2`); objects without `enc-version` are the legacy single-block format and are still decrypted by `EncryptionManager.decrypt`
+- **Downloads**: staged in `cacheDir/downloads`, then published by `util/DownloadsStore` (MediaStore on Android 10+, `Download/CloudDriveS3`)
+- **Uploads of unknown size**: `TransferManager` asks the provider for the length, else spools to `cacheDir/upload_spool`; never reads a whole file into memory
+- **App lock**: `util/AppLockAuth` picks biometrics and/or device credential; the app never opens when no authentication is available
 - **Untrusted names**: file names from share intents, the file picker and S3 keys go through `util/FileNames` before becoming an S3 key or a local path (no path traversal)
 - **Biometric lock**: required again after 30 s in the background; `FLAG_SECURE` is set while it is enabled
 - **Cache hygiene**: `util/CacheCleaner` deletes leftover preview files at startup and caps the thumbnail cache
@@ -134,8 +138,8 @@ All S3 operations are suspend functions in `S3Repository`. UI calls happen via `
 
 ## Common Patterns in This Codebase
 
-1. **Singleton for AWS Client**: `S3ClientProvider.getInstance()` ensures single S3Client instance
-2. **DataStore Access**: `SettingsManager` wraps DataStore operations (getConfig, saveConfig)
+1. **Singleton for AWS Client**: `S3ClientProvider.getClient(config)` returns the cached S3Client (per credentials + region)
+2. **Settings Access**: `SettingsManager.getInstance(context)` wraps EncryptedSharedPreferences (profiles, credentials, keys)
 3. **Error Handling**: Try-catch blocks around S3 calls, errors shown via Snackbar or Toast
 4. **Folder Navigation**: Uses S3 prefix pattern (e.g., `folder1/subfolder/`) — "/" is treated as folder separator, ".." means parent
 5. **File Type Icons**: Icons determined by file extension (image, video, audio, document)

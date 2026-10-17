@@ -10,7 +10,6 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,6 +48,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -79,6 +80,7 @@ import com.clouddrive.ui.SettingsScreen
 import com.clouddrive.ui.SettingsSection
 import com.clouddrive.ui.TransferQueueScreen
 import com.clouddrive.ui.theme.CloudDriveTheme
+import com.clouddrive.util.AppLockAuth
 import com.clouddrive.util.FileNames
 
 enum class Screen { Home, Settings, Transfers, GallerySync }
@@ -156,12 +158,21 @@ class MainActivity : FragmentActivity() {
                 }
 
                 if (!isAuthenticated) {
-                    LockScreen(onRetry = {
-                        showBiometricPrompt(
-                            onSuccess = { isAuthenticated = true },
-                            onCancel = { finish() },
-                        )
-                    })
+                    LockScreen(
+                        notice = lockNotice.value,
+                        onDisableLock = if (canDisableLock.value) {
+                            {
+                                settingsManager.setBiometricEnabled(false)
+                                isAuthenticated = true
+                            }
+                        } else null,
+                        onRetry = {
+                            showBiometricPrompt(
+                                onSuccess = { isAuthenticated = true },
+                                onCancel = { finish() },
+                            )
+                        },
+                    )
                     return@CloudDriveTheme
                 }
 
@@ -608,16 +619,27 @@ class MainActivity : FragmentActivity() {
         return 0L
     }
 
-    private fun showBiometricPrompt(onSuccess: () -> Unit, onCancel: () -> Unit) {
-        val executor = ContextCompat.getMainExecutor(this)
+    /** Why the lock screen cannot offer a prompt right now (null while it can). */
+    private val lockNotice = mutableStateOf<String?>(null)
 
-        val biometricManager = BiometricManager.from(this)
-        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-            != BiometricManager.BIOMETRIC_SUCCESS
-        ) {
-            onSuccess()
+    /** True when the device has no screen lock at all, so the user may switch the app lock off. */
+    private val canDisableLock = mutableStateOf(false)
+
+    private fun showBiometricPrompt(onSuccess: () -> Unit, onCancel: () -> Unit) {
+        val plan = AppLockAuth.plan(this)
+        if (plan !is AppLockAuth.Plan.Use) {
+            // Never open the app because authentication is unavailable: stay locked and say why.
+            if (plan is AppLockAuth.Plan.NoScreenLock) {
+                lockNotice.value = "Este aparelho não tem bloqueio de tela. Defina um PIN, padrão ou biometria nas configurações do Android, ou desative a trava do app."
+                canDisableLock.value = true
+            } else {
+                lockNotice.value = "Autenticação indisponível no momento. Tente novamente."
+                canDisableLock.value = false
+            }
             return
         }
+        lockNotice.value = null
+        canDisableLock.value = false
 
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -636,16 +658,19 @@ class MainActivity : FragmentActivity() {
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Cloud Drive S3")
             .setSubtitle("Autentique-se para acessar seus arquivos")
-            .setNegativeButtonText("Cancelar")
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setAllowedAuthenticators(plan.authenticators)
+            .apply {
+                // Must not be set together with DEVICE_CREDENTIAL (the system provides its own).
+                if (plan.needsNegativeButton) setNegativeButtonText("Cancelar")
+            }
             .build()
 
-        BiometricPrompt(this, executor, callback).authenticate(promptInfo)
+        BiometricPrompt(this, ContextCompat.getMainExecutor(this), callback).authenticate(promptInfo)
     }
 }
 
 @Composable
-private fun LockScreen(onRetry: () -> Unit) {
+private fun LockScreen(notice: String?, onDisableLock: (() -> Unit)?, onRetry: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -664,9 +689,11 @@ private fun LockScreen(onRetry: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Autenticação biométrica necessária",
+            notice ?: "Autenticação necessária",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp),
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onRetry) {
@@ -677,6 +704,10 @@ private fun LockScreen(onRetry: () -> Unit) {
             )
             Spacer(modifier = Modifier.size(8.dp))
             Text("Autenticar")
+        }
+        if (onDisableLock != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = onDisableLock) { Text("Desativar trava do app") }
         }
     }
 }

@@ -16,6 +16,7 @@ import aws.sdk.kotlin.services.s3.model.UploadPartRequest
 import aws.smithy.kotlin.runtime.content.ByteStream
 import aws.smithy.kotlin.runtime.content.toByteArray
 import aws.smithy.kotlin.runtime.content.writeToFile
+import com.clouddrive.crypto.ChunkedEncryption
 import com.clouddrive.crypto.EncryptionManager
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -85,7 +86,36 @@ class S3Repository(
         val key = keyProvider?.invoke()
             ?: throw IllegalStateException("Arquivo criptografado: chave de criptografia indisponivel neste perfil")
         // A wrong key or tampered data fails the GCM tag check and throws.
-        return EncryptionManager.decrypt(bytes, key)
+        return if (isChunked(metadata)) {
+            ChunkedEncryption.decryptBytes(bytes, key)
+        } else {
+            EncryptionManager.decrypt(bytes, key)
+        }
+    }
+
+    private fun isChunked(metadata: Map<String, String>) =
+        metadata[ChunkedEncryption.METADATA_KEY] == ChunkedEncryption.METADATA_VALUE
+
+    /**
+     * Chunked objects are decrypted file to file (constant memory). Legacy single-block objects
+     * still have to be read whole: their GCM tag covers the entire content.
+     */
+    private fun decryptFileInPlace(file: File, metadata: Map<String, String>) {
+        if (!isChunked(metadata)) {
+            file.writeBytes(decryptIfNeeded(file.readBytes(), metadata))
+            return
+        }
+        val key = keyProvider?.invoke()
+            ?: throw IllegalStateException("Arquivo criptografado: chave de criptografia indisponivel neste perfil")
+        val plain = File(file.path + ".dec")
+        try {
+            ChunkedEncryption.decryptFile(file, plain, key)
+            if (!file.delete() || !plain.renameTo(file)) {
+                throw java.io.IOException("Nao foi possivel gravar o arquivo descriptografado")
+            }
+        } finally {
+            plain.delete()
+        }
     }
 
     suspend fun listFiles(prefix: String = ""): List<S3FileItem> {
@@ -247,6 +277,12 @@ class S3Repository(
                 partNumber++
             }
 
+            // The size decided how many parts to send: if the source ended early or has more data,
+            // completing would silently publish a truncated object.
+            if (totalBytesRead != totalSize || inputStream.read() != -1) {
+                throw IllegalStateException("O tamanho do arquivo mudou durante o upload")
+            }
+
             val completeReq = CompleteMultipartUploadRequest {
                 this.bucket = this@S3Repository.bucket
                 this.key = key
@@ -301,7 +337,7 @@ class S3Repository(
             response.body?.writeToFile(destinationFile)
         }
         if (metadata[ENCRYPTED_METADATA_KEY] == "true") {
-            destinationFile.writeBytes(decryptIfNeeded(destinationFile.readBytes(), metadata))
+            decryptFileInPlace(destinationFile, metadata)
         }
         return metadata
     }

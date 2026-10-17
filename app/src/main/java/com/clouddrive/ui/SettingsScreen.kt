@@ -1,7 +1,7 @@
 package com.clouddrive.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.biometric.BiometricManager
+import com.clouddrive.util.AppLockAuth
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -797,11 +797,8 @@ private fun SecuritySection(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val biometricManager = remember { BiometricManager.from(context) }
-    val canAuthenticate = remember {
-        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-            BiometricManager.BIOMETRIC_SUCCESS
-    }
+    // Biometrics or, as a fallback, the device PIN/pattern/password.
+    val canAuthenticate = remember { AppLockAuth.plan(context) is AppLockAuth.Plan.Use }
 
     Column(
         modifier = modifier
@@ -829,11 +826,11 @@ private fun SecuritySection(
                 )
                 Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(
-                        text = "Autenticação biométrica",
+                        text = "Trava do app",
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
-                        text = "Exigir fingerprint ao abrir o app",
+                        text = "Exigir biometria ou PIN do aparelho ao abrir o app",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -888,7 +885,7 @@ private fun SecuritySection(
 
         if (!canAuthenticate && (currentProfileName == null || currentProfileName.isBlank())) {
             Text(
-                text = "Nenhuma opção de segurança disponível. Configure um perfil e/ou cadastre biometria no dispositivo.",
+                text = "Nenhuma opção de segurança disponível. Configure um perfil e/ou defina um bloqueio de tela (PIN, padrão ou biometria) no dispositivo.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
