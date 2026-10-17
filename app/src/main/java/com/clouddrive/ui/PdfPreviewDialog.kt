@@ -67,7 +67,7 @@ fun PdfPreviewDialog(
 
     val bitmapCache = remember { mutableStateMapOf<Int, Bitmap>() }
 
-    val repository = remember(config) { S3Repository(config) }
+    val repository = remember(config) { S3Repository.forCurrentProfile(context, config) }
 
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
 

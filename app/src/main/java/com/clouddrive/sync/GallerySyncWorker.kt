@@ -28,7 +28,7 @@ class GallerySyncWorker(
         val bucketName = inputData.getString(KEY_BUCKET_NAME) ?: return Result.failure()
 
         val app = applicationContext as? CloudDriveApp ?: return Result.failure()
-        val settingsManager = SettingsManager(applicationContext)
+        val settingsManager = SettingsManager.getInstance(applicationContext)
         val db = app.syncDatabase
         val dao = db.syncedFileDao()
 

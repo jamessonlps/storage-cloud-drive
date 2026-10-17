@@ -14,6 +14,7 @@ import com.clouddrive.util.FileNames
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -231,7 +232,9 @@ object TransferManager {
         profileName: String? = null,
     ) {
         val sem = if (item.type == TransferType.DELETE) deleteSemaphore else transferSemaphore
-        val job = scope.launch {
+        // LAZY: the job must be in `jobs` before it can run and remove itself in its finally block,
+        // otherwise a fast transfer left a finished job in the map forever.
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             sem.acquire()
             try {
                 // Check if item was paused/cancelled while waiting for semaphore
@@ -259,6 +262,7 @@ object TransferManager {
             }
         }
         jobs[item.id] = job
+        job.start()
     }
 
     private fun updateState(id: String, state: TransferState, error: String? = null) {
@@ -405,7 +409,10 @@ object TransferManager {
         settingsManager: SettingsManager? = null,
         profileName: String? = null,
     ) {
-        val repository = S3Repository(config)
+        val repository = S3Repository(
+            config,
+            if (settingsManager != null) EncryptionManager.keyProviderFor(settingsManager, profileName) else null,
+        )
         var currentRetry = 0
 
         while (true) {
@@ -425,20 +432,10 @@ object TransferManager {
                 try {
                     // Streamed to a temporary file so an interrupted or failed download never
                     // leaves a half-written (or still encrypted) file under the final name.
-                    val metadata = repository.downloadFile(item.s3Key, partial)
-
-                    if (metadata["encrypted"] == "true") {
-                        if (settingsManager == null || profileName == null) {
-                            throw IllegalStateException("Arquivo criptografado: perfil indisponivel para descriptografar")
-                        }
-                        val encoded = settingsManager.getEncryptionKey(profileName)
-                            ?: throw IllegalStateException("Chave de criptografia nao encontrada neste perfil")
-                        val key = EncryptionManager.keyFromBase64(encoded)
-                        // A bad tag (wrong key / tampered data) throws and fails the transfer
-                        // instead of silently delivering ciphertext as if it were the file.
-                        val decrypted = EncryptionManager.decrypt(partial.readBytes(), key)
-                        partial.writeBytes(decrypted)
-                    }
+                    // Decrypted by the repository when the object was uploaded encrypted. A
+                    // missing key or a bad tag (wrong key / tampered data) throws and fails the
+                    // transfer instead of silently delivering ciphertext as if it were the file.
+                    repository.downloadFile(item.s3Key, partial)
 
                     if (dest.exists() && !dest.delete()) {
                         throw java.io.IOException("Nao foi possivel substituir o arquivo existente")

@@ -21,7 +21,7 @@ class CloudDriveApp : Application(), ImageLoaderFactory {
         syncDatabase = SyncDatabase.getInstance(this)
 
         // Register ContentObserver if any profile has gallery sync enabled
-        val settingsManager = SettingsManager(this)
+        val settingsManager = SettingsManager.getInstance(this)
         GalleryContentObserver.updateRegistration(this, settingsManager)
 
         // Leftover preview copies from a killed process, and an unbounded thumbnail cache.

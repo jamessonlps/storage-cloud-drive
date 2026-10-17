@@ -68,7 +68,7 @@ fun AudioPreviewDialog(
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
 
-    val repository = remember(config) { S3Repository(config) }
+    val repository = remember(config) { S3Repository.forCurrentProfile(context, config) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()

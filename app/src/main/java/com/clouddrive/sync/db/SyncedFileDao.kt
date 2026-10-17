@@ -40,6 +40,12 @@ interface SyncedFileDao {
     suspend fun getFailedFiles(profileName: String, bucket: String): List<SyncedFileEntity>
 
     @Query(
+        """SELECT s3Key FROM synced_files
+        WHERE profileName = :profileName AND s3Bucket = :bucket"""
+    )
+    suspend fun getTrackedS3Keys(profileName: String, bucket: String): List<String>
+
+    @Query(
         """SELECT mediaStoreId FROM synced_files
         WHERE profileName = :profileName AND s3Bucket = :bucket"""
     )

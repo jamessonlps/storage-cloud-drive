@@ -7,6 +7,7 @@ import android.provider.MediaStore
 import com.clouddrive.sync.db.SyncDatabase
 import com.clouddrive.sync.db.SyncStatus
 import com.clouddrive.sync.db.SyncedFileEntity
+import com.clouddrive.util.S3Keys
 
 data class GalleryFolder(
     val name: String,
@@ -26,23 +27,26 @@ data class MediaFileInfo(
 
 object GalleryScanner {
 
+    private class FolderCount(val firstPath: String) {
+        var count = 0
+    }
+
     fun scanGalleryFolders(context: Context): List<GalleryFolder> {
-        val folders = mutableMapOf<String, MutableList<String>>()
-
-        queryMedia(context, MediaStore.Images.Media.EXTERNAL_CONTENT_URI) { folderName, relativePath, _ ->
-            folders.getOrPut(folderName) { mutableListOf() }
-            folders[folderName]!!.add(relativePath)
-        }
-        queryMedia(context, MediaStore.Video.Media.EXTERNAL_CONTENT_URI) { folderName, relativePath, _ ->
-            folders.getOrPut(folderName) { mutableListOf() }
-            folders[folderName]!!.add(relativePath)
+        // Only counts: it used to keep one path string per photo/video in a list just to take
+        // its size afterwards (tens of thousands of strings for a large library).
+        val folders = mutableMapOf<String, FolderCount>()
+        val collect: (String, String, Int) -> Unit = { folderName, relativePath, _ ->
+            folders.getOrPut(folderName) { FolderCount(relativePath) }.count++
         }
 
-        return folders.map { (name, paths) ->
+        queryMedia(context, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, collect)
+        queryMedia(context, MediaStore.Video.Media.EXTERNAL_CONTENT_URI, collect)
+
+        return folders.map { (name, folder) ->
             GalleryFolder(
                 name = name,
-                relativePath = paths.firstOrNull() ?: name,
-                fileCount = paths.size,
+                relativePath = folder.firstPath,
+                fileCount = folder.count,
             )
         }.sortedBy { it.name }
     }
@@ -59,6 +63,8 @@ object GalleryScanner {
         val tracked = dao.getTrackedMediaStoreIds(profileName, bucket).toSet()
         // Set lookup: this check runs once per photo/video on the device.
         val enabled = enabledFolders.toSet()
+        // Keys already used by earlier files: a new file must never reuse one (see S3Keys).
+        val takenKeys = dao.getTrackedS3Keys(profileName, bucket).toHashSet()
         val newFiles = mutableListOf<SyncedFileEntity>()
 
         val collector = { info: MediaFileInfo ->
@@ -72,7 +78,11 @@ object GalleryScanner {
                         fileSize = info.fileSize,
                         dateModified = info.dateModified,
                         mimeType = info.mimeType,
-                        s3Key = buildS3Key(s3Prefix, info.folderName, info.fileName),
+                        s3Key = S3Keys.uniqueKey(
+                            buildS3Key(s3Prefix, info.folderName, info.fileName),
+                            info.mediaStoreId,
+                            takenKeys,
+                        ),
                         s3Bucket = bucket,
                         profileName = profileName,
                         syncStatus = SyncStatus.PENDING,

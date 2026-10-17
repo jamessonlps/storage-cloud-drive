@@ -92,9 +92,12 @@ import com.clouddrive.service.ACTION_TRANSFER_COMPLETE
 import com.clouddrive.transfer.TransferItem
 import com.clouddrive.transfer.TransferManager
 import com.clouddrive.transfer.TransferType
+import com.clouddrive.util.FileNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val MAX_SILENT_REFRESH_ITEMS = 1000
 
 @Composable
 fun FileListScreen(
@@ -140,7 +143,8 @@ fun FileListScreen(
     var allSelectedInFolder by remember { mutableStateOf(false) }
 
     fun notifySelectionChanged() {
-        val hasFolder = selectedKeys.any { key -> files.any { it.key == key && it.isFolder } }
+        val selected = selectedKeys.toHashSet()
+        val hasFolder = files.any { it.isFolder && it.key in selected }
         onSelectionChanged(isSelectionMode, selectedKeys.size, hasFolder)
     }
 
@@ -213,7 +217,8 @@ fun FileListScreen(
 
     LaunchedEffect(downloadSelectedTrigger) {
         if (downloadSelectedTrigger > 0 && selectedKeys.isNotEmpty()) {
-            val filesToDownload = files.filter { it.key in selectedKeys && !it.isFolder }
+            val selected = selectedKeys.toHashSet()
+            val filesToDownload = files.filter { it.key in selected && !it.isFolder }
             if (filesToDownload.isNotEmpty()) {
                 val batchId = java.util.UUID.randomUUID().toString()
                 val items = filesToDownload.map { file ->
@@ -238,26 +243,48 @@ fun FileListScreen(
         if (isSelectionMode) clearSelection()
     }
 
-    fun loadFiles() {
+    // Identifies the latest listing request. The answer of an older one (the user opened another
+    // folder or refreshed in the meantime) is dropped; before, whichever response arrived last
+    // won, so a slow request for folder A could replace the contents of folder B.
+    val requestGeneration = remember { java.util.concurrent.atomic.AtomicInteger(0) }
+
+    /**
+     * [silent] is used when a transfer finishes: the current list stays on screen (no spinner,
+     * no scroll reset) and is replaced when the new listing arrives. It re-fetches as many entries
+     * as were already loaded, so pages the user scrolled to are not thrown away.
+     */
+    fun loadFiles(silent: Boolean = false) {
+        // One S3 page holds at most 1000 entries: for longer lists wait for a manual refresh
+        // instead of silently cutting the list.
+        if (silent && files.size > MAX_SILENT_REFRESH_ITEMS) return
+        val generation = requestGeneration.incrementAndGet()
+        val prefix = currentPrefix
         scope.launch {
-            isLoading = true
-            errorMessage = null
-            continuationToken = null
-            hasMore = false
-            files = emptyList()
+            if (!silent) {
+                isLoading = true
+                errorMessage = null
+                continuationToken = null
+                hasMore = false
+                files = emptyList()
+            }
             try {
+                val limit = if (silent) files.size.coerceIn(pageSize, MAX_SILENT_REFRESH_ITEMS) else pageSize
                 val result = withContext(Dispatchers.IO) {
-                    repository.listFilesPaged(currentPrefix, pageSize)
+                    repository.listFilesPaged(prefix, limit)
                 }
+                if (generation != requestGeneration.get()) return@launch
                 files = result.items
                 continuationToken = result.nextToken
                 hasMore = result.nextToken != null
                 onItemCountChanged(result.items.size, hasMore)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (generation != requestGeneration.get() || silent) return@launch
                 errorMessage = e.message ?: "Erro desconhecido"
                 onItemCountChanged(0, false)
             } finally {
-                isLoading = false
+                if (generation == requestGeneration.get()) isLoading = false
             }
         }
     }
@@ -265,18 +292,25 @@ fun FileListScreen(
     fun loadMore() {
         val token = continuationToken ?: return
         if (isLoadingMore) return
+        val generation = requestGeneration.get()
+        val prefix = currentPrefix
         scope.launch {
             isLoadingMore = true
             try {
                 val result = withContext(Dispatchers.IO) {
-                    repository.listFilesPaged(currentPrefix, pageSize, token)
+                    repository.listFilesPaged(prefix, pageSize, token)
                 }
+                if (generation != requestGeneration.get()) return@launch
                 files = files + result.items
                 continuationToken = result.nextToken
                 hasMore = result.nextToken != null
                 onItemCountChanged(files.size, hasMore)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Toast.makeText(context, "Erro ao carregar mais: ${e.message}", Toast.LENGTH_SHORT).show()
+                if (generation == requestGeneration.get()) {
+                    Toast.makeText(context, "Erro ao carregar mais: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             } finally {
                 isLoadingMore = false
             }
@@ -291,7 +325,7 @@ fun FileListScreen(
                 debounceJob?.cancel()
                 debounceJob = scope.launch {
                     kotlinx.coroutines.delay(500)
-                    loadFiles()
+                    loadFiles(silent = true)
                 }
             }
         }
@@ -333,7 +367,10 @@ fun FileListScreen(
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         val batchId = java.util.UUID.randomUUID().toString()
         val items = uris.map { uri ->
-            val fileName = getFileName(context, uri) ?: "arquivo_${System.currentTimeMillis()}"
+            // The provider chooses the display name and it becomes part of the S3 key: keep only
+            // the file name (a value like "primary:Download/x.jpg" created a folder in the bucket).
+            val fileName = FileNames.sanitize(getFileName(context, uri))
+                ?: "arquivo_${System.currentTimeMillis()}"
             val fileSize = getFileSize(context, uri)
             val contentType = context.contentResolver.getType(uri)
             TransferItem(
@@ -676,7 +713,8 @@ fun FileListScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val filesToDelete = files.filter { it.key in selectedKeys }
+                        val selected = selectedKeys.toHashSet()
+                        val filesToDelete = files.filter { it.key in selected }
                         showBatchDeleteDialog = false
                         val batchId = java.util.UUID.randomUUID().toString()
                         val items = filesToDelete.map { file ->

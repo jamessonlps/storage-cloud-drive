@@ -95,7 +95,7 @@ class MainActivity : FragmentActivity() {
     private var stoppedAtMs = 0L
 
     // Created once and shared with the UI: building EncryptedSharedPreferences touches the Keystore.
-    private val lockSettings by lazy { SettingsManager(applicationContext) }
+    private val lockSettings by lazy { SettingsManager.getInstance(applicationContext) }
 
     override fun onStart() {
         super.onStart()

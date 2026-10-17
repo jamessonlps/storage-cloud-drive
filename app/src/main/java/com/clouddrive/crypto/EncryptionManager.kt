@@ -63,6 +63,16 @@ object EncryptionManager {
         return cipher.doFinal(ciphertext)
     }
 
+    /**
+     * Lazily looks up the profile's key. Unlike [getOrCreateKey] it never creates one: reading
+     * must not invent a key that cannot possibly decrypt what is already stored.
+     */
+    fun keyProviderFor(settingsManager: SettingsManager, profileName: String?): () -> SecretKey? = {
+        profileName
+            ?.let { settingsManager.getEncryptionKey(it) }
+            ?.let { keyFromBase64(it) }
+    }
+
     fun isEnabled(settingsManager: SettingsManager, profileName: String): Boolean {
         return settingsManager.isEncryptionEnabled(profileName)
     }

@@ -25,10 +25,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: bash .github/scripts/gradle-annotate.sh assembleDebug
 
       - name: Run unit tests
-        run: ./gradlew test
+        run: bash .github/scripts/gradle-annotate.sh test
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -45,7 +45,7 @@ jobs:
           files: ./app/build/reports/coverage.xml
 
       - name: Build release APK
-        run: ./gradlew assembleRelease
+        run: bash .github/scripts/gradle-annotate.sh assembleRelease
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -71,7 +71,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run lint checks
-        run: ./gradlew lint
+        run: bash .github/scripts/gradle-annotate.sh lint
 
       - name: Upload lint results
         uses: actions/upload-artifact@v4

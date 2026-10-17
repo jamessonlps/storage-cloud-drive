@@ -51,7 +51,7 @@ fun VideoPreviewDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var tempFile by remember { mutableStateOf<File?>(null) }
 
-    val repository = remember(config) { S3Repository(config) }
+    val repository = remember(config) { S3Repository.forCurrentProfile(context, config) }
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()

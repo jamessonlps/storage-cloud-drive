@@ -25,7 +25,7 @@ class GalleryContentObserver(
     }
 
     private fun triggerSync() {
-        val settingsManager = SettingsManager(context)
+        val settingsManager = SettingsManager.getInstance(context)
         val profiles = settingsManager.getProfileNames()
 
         for (profile in profiles) {

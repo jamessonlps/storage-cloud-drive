@@ -60,7 +60,7 @@ class S3ImageFetcher(
             // must never leave a truncated image that would then be served from cache forever.
             val partial = File(cacheDir, cacheKey + CacheCleaner.PARTIAL_SUFFIX)
             try {
-                S3Repository(data.config).downloadFile(data.key, partial)
+                S3Repository.forCurrentProfile(options.context, data.config).downloadFile(data.key, partial)
                 if (!partial.renameTo(cachedFile)) {
                     throw IOException("Nao foi possivel gravar a miniatura no cache")
                 }
