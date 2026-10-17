@@ -21,4 +21,9 @@ if [ "$status" -ne 0 ]; then
     echo "::error title=Lint errors::${issues}"
   fi
 fi
+# Failed unit tests: the console only shows the test line, the stack trace is in the XML results.
+if ls app/build/test-results/*/*.xml >/dev/null 2>&1 && [ "$status" -ne 0 ]; then
+  traces="$(grep -h -A14 '<failure' app/build/test-results/*/*.xml | head -50 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+  [ -n "$traces" ] && echo "::error title=Test stack traces::${traces}"
+fi
 exit "$status"
