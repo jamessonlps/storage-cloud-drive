@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.TableChart
@@ -128,6 +130,7 @@ fun FileListScreen(
     var isLoadingMore by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<S3FileItem?>(null) }
+    var showDetailsDialog by remember { mutableStateOf<S3FileItem?>(null) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var previewImageKey by remember { mutableStateOf<S3FileItem?>(null) }
     var previewVideoKey by remember { mutableStateOf<S3FileItem?>(null) }
@@ -513,6 +516,7 @@ fun FileListScreen(
                                     }
                                 },
                                 onToggleSelect = { toggleSelection(file.key) },
+                                onShowDetails = { showDetailsDialog = file },
                             )
                         }
 
@@ -570,6 +574,7 @@ fun FileListScreen(
                                     }
                                 },
                                 onToggleSelect = { toggleSelection(file.key) },
+                                onShowDetails = { showDetailsDialog = file },
                             )
                         }
 
@@ -625,6 +630,13 @@ fun FileListScreen(
     }
 
     // New folder dialog
+    showDetailsDialog?.let { file ->
+        FileDetailsDialog(
+            file = file,
+            onDismiss = { showDetailsDialog = null },
+        )
+    }
+
     if (showNewFolderDialog) {
         var folderName by remember { mutableStateOf("") }
         AlertDialog(
@@ -797,6 +809,7 @@ private fun FileItemCard(
     onDelete: () -> Unit,
     onLongClick: () -> Unit,
     onToggleSelect: () -> Unit,
+    onShowDetails: () -> Unit,
 ) {
     Card(
         modifier = Modifier
@@ -862,6 +875,14 @@ private fun FileItemCard(
                 }
             }
 
+            IconButton(onClick = onShowDetails) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = "Detalhes de ${file.fileName}",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+
             if (!isSelectionMode && !file.isFolder) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton(onClick = onDownload) {
@@ -895,6 +916,7 @@ private fun GridFileItemCard(
     onFileClick: () -> Unit,
     onLongClick: () -> Unit,
     onToggleSelect: () -> Unit,
+    onShowDetails: () -> Unit,
 ) {
     val isImage = !file.isFolder && isImageFile(file.fileName)
 
@@ -937,6 +959,20 @@ private fun GridFileItemCard(
                         modifier = Modifier.size(48.dp),
                     )
                 }
+            }
+
+            IconButton(
+                onClick = onShowDetails,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = "Detalhes de ${file.fileName}",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
 
             // Filename overlay at bottom
