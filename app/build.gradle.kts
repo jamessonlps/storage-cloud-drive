@@ -1,3 +1,9 @@
+import java.util.Properties
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -110,4 +116,147 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+val releaseUnitTestApplicationId = android.defaultConfig.applicationId ?: android.namespace
+val releaseUnitTestMinSdk = android.defaultConfig.minSdk ?: 1
+val releaseUnitTestTargetSdk = android.defaultConfig.targetSdk ?: releaseUnitTestMinSdk
+val releaseUnitTestVersionCode = android.defaultConfig.versionCode ?: 1
+val releaseUnitTestVersionName = android.defaultConfig.versionName ?: "1.0"
+val releaseUnitTestCompileSdk = android.compileSdk ?: error("compileSdk is required")
+val releaseUnitTestBuildTools = android.buildToolsVersion
+val releaseUnitTestSdkDirectory = android.sdkDirectory
+
+// Robolectric 4.13 resolves Activities from android_resource_apk, so releaseUnitTest
+// needs a separate binary manifest while the packaged production APK stays untouched.
+val prepareReleaseUnitTestRobolectricResources = tasks.register("prepareReleaseUnitTestRobolectricResources") {
+    dependsOn("generateReleaseUnitTestConfig")
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val releaseUnitTestBuildDirectory = layout.buildDirectory.get().asFile
+        val configFile = releaseUnitTestBuildDirectory.resolve(
+            "intermediates/unit_test_config_directory/releaseUnitTest/out/com/android/tools/test_config.properties"
+        )
+        check(configFile.isFile) { "Missing releaseUnitTest Robolectric configuration: $configFile" }
+
+        val testConfig = Properties().apply {
+            configFile.inputStream().use { load(it) }
+        }
+        val sourceResourceApk = project.file(
+            testConfig.getProperty("android_resource_apk")
+                ?: error("android_resource_apk is missing from $configFile")
+        )
+        check(sourceResourceApk.isFile) { "Missing releaseUnitTest resource APK: $sourceResourceApk" }
+        check(sourceResourceApk.invariantSeparatorsPath.contains("releaseUnitTest")) {
+            "Expected the releaseUnitTest resource APK, found $sourceResourceApk"
+        }
+
+        val outputDirectory = releaseUnitTestBuildDirectory.resolve("intermediates/robolectric/releaseUnitTest")
+        check(outputDirectory.mkdirs() || outputDirectory.isDirectory) {
+            "Could not create releaseUnitTest Robolectric output directory: $outputDirectory"
+        }
+
+        val testManifest = releaseUnitTestBuildDirectory.resolve("generated/robolectric/releaseUnitTest/AndroidManifest.xml")
+        check(testManifest.parentFile.mkdirs() || testManifest.parentFile.isDirectory) {
+            "Could not create releaseUnitTest manifest directory: ${testManifest.parentFile}"
+        }
+        testManifest.writeText(
+            """<?xml version="1.0" encoding="utf-8"?>
+                |<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="$releaseUnitTestApplicationId">
+                |    <uses-sdk android:minSdkVersion="$releaseUnitTestMinSdk" android:targetSdkVersion="$releaseUnitTestTargetSdk" />
+                |    <application>
+                |        <activity android:name="androidx.activity.ComponentActivity" android:exported="true" />
+                |    </application>
+                |</manifest>
+                |""".trimMargin()
+        )
+
+        val androidJar = releaseUnitTestSdkDirectory.resolve("platforms/android-$releaseUnitTestCompileSdk/android.jar")
+        val aapt2 = releaseUnitTestSdkDirectory.resolve("build-tools/$releaseUnitTestBuildTools/aapt2")
+        check(androidJar.isFile) { "Missing Android platform resources: $androidJar" }
+        check(aapt2.isFile) { "Missing aapt2 executable: $aapt2" }
+
+        val manifestOnlyApk = outputDirectory.resolve("releaseUnitTest-manifest.ap_")
+        manifestOnlyApk.delete()
+        val aapt2Process = ProcessBuilder(
+            aapt2.absolutePath,
+            "link",
+            "-o", manifestOnlyApk.absolutePath,
+            "--manifest", testManifest.absolutePath,
+            "-I", androidJar.absolutePath,
+            "--min-sdk-version", releaseUnitTestMinSdk.toString(),
+            "--target-sdk-version", releaseUnitTestTargetSdk.toString(),
+            "--version-code", releaseUnitTestVersionCode.toString(),
+            "--version-name", releaseUnitTestVersionName
+        ).redirectErrorStream(true).start()
+        val aapt2Output = aapt2Process.inputStream.bufferedReader().use { it.readText() }
+        val aapt2ExitCode = aapt2Process.waitFor()
+        check(aapt2ExitCode == 0 && manifestOnlyApk.isFile) {
+            "Could not compile the releaseUnitTest manifest with aapt2 (exit $aapt2ExitCode):\n$aapt2Output"
+        }
+
+        val manifestBytes = ZipFile(manifestOnlyApk).use { manifestApk ->
+            val manifestEntry = manifestApk.getEntry("AndroidManifest.xml")
+                ?: error("aapt2 output does not contain AndroidManifest.xml: $manifestOnlyApk")
+            manifestApk.getInputStream(manifestEntry).use { it.readBytes() }
+        }
+        val outputResourceApk = outputDirectory.resolve("releaseUnitTest-resources.ap_")
+        outputResourceApk.delete()
+        ZipFile(sourceResourceApk).use { sourceApk ->
+            check(sourceApk.getEntry("AndroidManifest.xml") != null) {
+                "The releaseUnitTest resource APK has no AndroidManifest.xml: $sourceResourceApk"
+            }
+
+            ZipOutputStream(outputResourceApk.outputStream().buffered()).use { outputApk ->
+                val entries = sourceApk.entries().asSequence()
+                    .filter { it.name != "AndroidManifest.xml" }
+                    .sortedBy { if (it.name == "resources.arsc") 0 else 1 }
+                for (entry in entries) {
+                    val outputEntry = ZipEntry(entry.name).apply {
+                        time = entry.time
+                        if (entry.method == ZipEntry.STORED) {
+                            method = ZipEntry.STORED
+                            size = entry.size
+                            compressedSize = entry.size
+                            crc = entry.crc
+                        } else {
+                            method = ZipEntry.DEFLATED
+                        }
+                    }
+                    outputApk.putNextEntry(outputEntry)
+                    sourceApk.getInputStream(entry).use { it.copyTo(outputApk) }
+                    outputApk.closeEntry()
+                }
+
+                val manifestCrc = CRC32().apply { update(manifestBytes) }.value
+                outputApk.putNextEntry(
+                    ZipEntry("AndroidManifest.xml").apply {
+                        method = ZipEntry.STORED
+                        size = manifestBytes.size.toLong()
+                        compressedSize = manifestBytes.size.toLong()
+                        crc = manifestCrc
+                    }
+                )
+                outputApk.write(manifestBytes)
+                outputApk.closeEntry()
+            }
+        }
+
+        testConfig.setProperty(
+            "android_merged_manifest",
+            testManifest.relativeTo(project.projectDir).invariantSeparatorsPath
+        )
+        testConfig.setProperty(
+            "android_resource_apk",
+            outputResourceApk.relativeTo(project.projectDir).invariantSeparatorsPath
+        )
+        configFile.outputStream().use { testConfig.store(it, "Generated for releaseUnitTest Robolectric resources") }
+    }
+}
+
+tasks.configureEach {
+    if (name == "testReleaseUnitTest") {
+        dependsOn(prepareReleaseUnitTestRobolectricResources)
+    }
 }
