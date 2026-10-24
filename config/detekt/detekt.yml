@@ -1,0 +1,11 @@
+# Kotlin1.9.22 / Detekt1.23.5. Compose conventions only; core rules stay enabled.
+config:
+  validation: true
+  warningsAsErrors: true
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+Compose:
+  active: true
+  ModifierMissing:
+    active: true
