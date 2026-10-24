@@ -97,9 +97,13 @@ jobs:
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew
 
+      - name: Verify frozen Detekt inputs
+        run: |
+          echo '41eb2c344ed5a4002604e94b82a31300a9a92c1c337a119249f95e78e925464a  config/detekt/baseline.xml' | sha256sum --check --strict
+          echo '3aee1a2d4cd157abd40db416aa03d6b2f309bc5c4f623e5cd8f64818d8938cfa  config/detekt/detekt.yml' | sha256sum --check --strict
+
       - name: Run detekt
-        run: ./gradlew detekt
-        continue-on-error: true
+        run: bash .github/scripts/gradle-annotate.sh detekt
 
       - name: Upload detekt results
         uses: actions/upload-artifact@v4
