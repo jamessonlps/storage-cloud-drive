@@ -531,7 +531,8 @@ class MainActivity : FragmentActivity() {
                                         currentScreen = Screen.Settings
                                     },
                                     modifier = Modifier.padding(padding),
-                                    message = "Para sincronizar sua galeria, configure uma conta AWS com credenciais válidas.",
+                                    message = "Para sincronizar sua galeria, configure " +
+                                        "uma conta AWS com credenciais válidas.",
                                     buttonText = "Configurar conta AWS",
                                 )
                             } else {
