@@ -524,7 +524,18 @@ class MainActivity : FragmentActivity() {
                             )
                         }
                         Screen.GallerySync -> {
-                            if (currentProfileName != null) {
+                            if (currentProfileName.isNullOrBlank() || config == null) {
+                                NoCredentialsScreen(
+                                    onGoToSettings = {
+                                        settingsSection = SettingsSection.AwsAccount
+                                        currentScreen = Screen.Settings
+                                    },
+                                    modifier = Modifier.padding(padding),
+                                    message = "Para sincronizar sua galeria, configure " +
+                                        "uma conta AWS com credenciais válidas.",
+                                    buttonText = "Configurar conta AWS",
+                                )
+                            } else {
                                 val profileBuckets = remember(currentProfileName) {
                                     settingsManager.getBuckets(currentProfileName!!)
                                 }
@@ -716,6 +727,8 @@ private fun LockScreen(notice: String?, onDisableLock: (() -> Unit)?, onRetry: (
 private fun NoCredentialsScreen(
     onGoToSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    message: String = "Acesse as configurações para conectar ao seu bucket S3",
+    buttonText: String = "Ir para Configurações",
 ) {
     Column(
         modifier = modifier.fillMaxSize(),
@@ -735,13 +748,13 @@ private fun NoCredentialsScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Acesse as configurações para conectar ao seu bucket S3",
+            message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(onClick = onGoToSettings) {
-            Text("Ir para Configurações")
+            Text(buttonText)
         }
     }
 }
