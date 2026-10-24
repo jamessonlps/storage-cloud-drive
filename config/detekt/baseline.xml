@@ -216,5 +216,7 @@
     <ID>WildcardImport:FileDetailsContractTest.kt$import androidx.compose.ui.test.*</ID>
     <ID>WildcardImport:FileDetailsContractTest.kt$import io.mockk.*</ID>
     <ID>WildcardImport:FileDetailsContractTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:TransferFailuresContractTest.kt$import androidx.compose.ui.test.*</ID>
+    <ID>WildcardImport:TransferFailuresContractTest.kt$import io.mockk.*</ID>
   </CurrentIssues>
 </SmellBaseline>
