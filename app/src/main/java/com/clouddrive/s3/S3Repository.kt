@@ -45,7 +45,12 @@ data class S3FileItem(
                 s /= 1024
                 unitIndex++
             }
-            return DecimalFormat("#,##0.#").format(s) + " " + units[unitIndex]
+            val formatter = DecimalFormat("#,##0.#")
+            if (unitIndex in 1 until units.lastIndex && formatter.format(s) == formatter.format(1024)) {
+                s /= 1024
+                unitIndex++
+            }
+            return formatter.format(s) + " " + units[unitIndex]
         }
 }
 
