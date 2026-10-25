@@ -51,13 +51,13 @@ object CacheCleaner {
         }
     }
 
-    /** Deletes the least recently modified files until the directory fits in [maxBytes]. */
+    /** Evicts completed files oldest-first toward [maxBytes], preserving partial downloads. */
     internal fun trimToSize(dir: File, maxBytes: Long) {
         val files = dir.listFiles()?.filter { it.isFile } ?: return
         var total = files.sumOf { it.length() }
         if (total <= maxBytes) return
 
-        for (file in files.sortedBy { it.lastModified() }) {
+        for (file in files.filterNot { it.name.endsWith(PARTIAL_SUFFIX) }.sortedBy { it.lastModified() }) {
             if (total <= maxBytes) break
             val size = file.length()
             if (file.delete()) total -= size
