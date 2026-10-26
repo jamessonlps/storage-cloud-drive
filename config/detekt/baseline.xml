@@ -1,0 +1,222 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:MainActivity.kt$MainActivity$biometricEnabled &amp;&amp; isAuthenticatedState.value &amp;&amp; stoppedAtMs != 0L &amp;&amp; SystemClock.elapsedRealtime() - stoppedAtMs &gt; RELOCK_AFTER_MS</ID>
+    <ID>ComplexCondition:SettingsManager.kt$SettingsManager$accessKey.isBlank() || secretKey.isBlank() || region.isBlank() || bucket.isBlank()</ID>
+    <ID>ComposableParamOrder:FileListScreen.kt$FileListScreen</ID>
+    <ID>ComposableParamOrder:SettingsScreen.kt$SettingsScreen</ID>
+    <ID>ComposableParamOrder:TransferQueueScreen.kt$TransferQueueScreen</ID>
+    <ID>CyclomaticComplexMethod:FileListScreen.kt$@Composable fun FileListScreen( config: S3Config, isGridView: Boolean, currentPrefix: String, onNavigateToFolder: (String) -&gt; Unit, refreshTrigger: Int, showNewFolderDialog: Boolean, onDismissNewFolderDialog: () -&gt; Unit, pageSize: Int, onItemCountChanged: (count: Int, hasMore: Boolean) -&gt; Unit, onSelectionChanged: (isSelectionMode: Boolean, selectedCount: Int, hasSelectedFolders: Boolean) -&gt; Unit, selectAllTrigger: Int, clearSelectionTrigger: Int, deleteSelectedTrigger: Int, downloadSelectedTrigger: Int, settingsManager: SettingsManager? = null, profileName: String? = null, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:GallerySyncScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun GallerySyncScreen( settingsManager: SettingsManager, profileName: String, buckets: List&lt;BucketEntry&gt;, snackbarHostState: SnackbarHostState, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:GallerySyncTracker.kt$GallerySyncTracker$private fun ensureObserving()</ID>
+    <ID>CyclomaticComplexMethod:MainActivity.kt$MainActivity$@OptIn(ExperimentalMaterial3Api::class) override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:SettingsScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun AwsAccountSection( settingsManager: SettingsManager, currentProfileName: String?, snackbarHostState: SnackbarHostState, onSaveSuccess: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>CyclomaticComplexMethod:TransferManager.kt$TransferManager$private suspend fun executeUpload( item: TransferItem, config: S3Config, context: Context, settingsManager: SettingsManager? = null, profileName: String? = null, )</ID>
+    <ID>CyclomaticComplexMethod:TransferQueueScreen.kt$@Composable private fun BatchCard( batch: BatchGroup, onPause: (() -&gt; Unit)?, onResume: (() -&gt; Unit)?, onCancel: (() -&gt; Unit)?, onRetryFailed: (() -&gt; Unit)?, onRemove: (() -&gt; Unit)?, )</ID>
+    <ID>CyclomaticComplexMethod:TransferQueueScreen.kt$private fun getBatchSubtitle(batch: BatchGroup): String</ID>
+    <ID>CyclomaticComplexMethod:TransferService.kt$TransferService$@OptIn(FlowPreview::class) private fun observeTransfers()</ID>
+    <ID>EmptyFunctionBlock:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream${}</ID>
+    <ID>ImplicitDefaultLocale:AudioPreviewDialog.kt$String.format("%d:%02d", minutes, seconds)</ID>
+    <ID>LongMethod:AudioPreviewDialog.kt$@Composable fun AudioPreviewDialog( audioKey: String, fileName: String, config: S3Config, onDismiss: () -&gt; Unit, )</ID>
+    <ID>LongMethod:FileListScreen.kt$@Composable fun FileListScreen( config: S3Config, isGridView: Boolean, currentPrefix: String, onNavigateToFolder: (String) -&gt; Unit, refreshTrigger: Int, showNewFolderDialog: Boolean, onDismissNewFolderDialog: () -&gt; Unit, pageSize: Int, onItemCountChanged: (count: Int, hasMore: Boolean) -&gt; Unit, onSelectionChanged: (isSelectionMode: Boolean, selectedCount: Int, hasSelectedFolders: Boolean) -&gt; Unit, selectAllTrigger: Int, clearSelectionTrigger: Int, deleteSelectedTrigger: Int, downloadSelectedTrigger: Int, settingsManager: SettingsManager? = null, profileName: String? = null, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:FileListScreen.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun FileItemCard( file: S3FileItem, isSelectionMode: Boolean, isSelected: Boolean, onFolderClick: () -&gt; Unit, onFileClick: () -&gt; Unit, onDownload: () -&gt; Unit, onDelete: () -&gt; Unit, onLongClick: () -&gt; Unit, onToggleSelect: () -&gt; Unit, onShowDetails: () -&gt; Unit, )</ID>
+    <ID>LongMethod:FileListScreen.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GridFileItemCard( file: S3FileItem, config: S3Config, isSelectionMode: Boolean, isSelected: Boolean, onFolderClick: () -&gt; Unit, onFileClick: () -&gt; Unit, onLongClick: () -&gt; Unit, onToggleSelect: () -&gt; Unit, onShowDetails: () -&gt; Unit, )</ID>
+    <ID>LongMethod:GalleryScanner.kt$GalleryScanner$private fun scanMediaFiles( context: Context, collectionUri: android.net.Uri, onFile: (MediaFileInfo) -&gt; Unit, )</ID>
+    <ID>LongMethod:GallerySyncScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun GallerySyncScreen( settingsManager: SettingsManager, profileName: String, buckets: List&lt;BucketEntry&gt;, snackbarHostState: SnackbarHostState, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:ImageGalleryDialog.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun ImageGalleryDialog( imageFiles: List&lt;S3FileItem&gt;, initialIndex: Int, config: S3Config, onDismiss: () -&gt; Unit, )</ID>
+    <ID>LongMethod:ImagePreviewDialog.kt$@Composable fun ImagePreviewDialog( imageKey: String, fileName: String, config: S3Config, onDismiss: () -&gt; Unit, )</ID>
+    <ID>LongMethod:MainActivity.kt$MainActivity$@OptIn(ExperimentalMaterial3Api::class) override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>LongMethod:PdfPreviewDialog.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun PdfPreviewDialog( pdfKey: String, fileName: String, config: S3Config, onDismiss: () -&gt; Unit, )</ID>
+    <ID>LongMethod:S3Repository.kt$S3Repository$suspend fun uploadMultipart( key: String, inputStream: InputStream, contentType: String?, totalSize: Long, partSizeBytes: Long = 5L * 1024 * 1024, metadata: Map&lt;String, String&gt;? = null, onPartCompleted: (partNumber: Int, completedPartsCount: Int, bytesTransferred: Long) -&gt; Unit, )</ID>
+    <ID>LongMethod:SettingsScreen.kt$@Composable private fun SecuritySection( settingsManager: SettingsManager, currentProfileName: String?, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:SettingsScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun AwsAccountSection( settingsManager: SettingsManager, currentProfileName: String?, snackbarHostState: SnackbarHostState, onSaveSuccess: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:SettingsScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun DisplaySection( settingsManager: SettingsManager, onThemeModeChanged: (String) -&gt; Unit, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:TransferManager.kt$TransferManager$private suspend fun executeUpload( item: TransferItem, config: S3Config, context: Context, settingsManager: SettingsManager? = null, profileName: String? = null, )</ID>
+    <ID>LongMethod:TransferQueueScreen.kt$@Composable fun TransferQueueScreen( config: S3Config?, settingsManager: SettingsManager? = null, profileName: String? = null, modifier: Modifier = Modifier, )</ID>
+    <ID>LongMethod:TransferQueueScreen.kt$@Composable private fun BatchCard( batch: BatchGroup, onPause: (() -&gt; Unit)?, onResume: (() -&gt; Unit)?, onCancel: (() -&gt; Unit)?, onRetryFailed: (() -&gt; Unit)?, onRemove: (() -&gt; Unit)?, )</ID>
+    <ID>LongMethod:VideoPreviewDialog.kt$@Composable fun VideoPreviewDialog( videoKey: String, fileName: String, config: S3Config, onDismiss: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:FileListScreen.kt$( config: S3Config, isGridView: Boolean, currentPrefix: String, onNavigateToFolder: (String) -&gt; Unit, refreshTrigger: Int, showNewFolderDialog: Boolean, onDismissNewFolderDialog: () -&gt; Unit, pageSize: Int, onItemCountChanged: (count: Int, hasMore: Boolean) -&gt; Unit, onSelectionChanged: (isSelectionMode: Boolean, selectedCount: Int, hasSelectedFolders: Boolean) -&gt; Unit, selectAllTrigger: Int, clearSelectionTrigger: Int, deleteSelectedTrigger: Int, downloadSelectedTrigger: Int, settingsManager: SettingsManager? = null, profileName: String? = null, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:FileListScreen.kt$( file: S3FileItem, config: S3Config, isSelectionMode: Boolean, isSelected: Boolean, onFolderClick: () -&gt; Unit, onFileClick: () -&gt; Unit, onLongClick: () -&gt; Unit, onToggleSelect: () -&gt; Unit, onShowDetails: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:FileListScreen.kt$( file: S3FileItem, isSelectionMode: Boolean, isSelected: Boolean, onFolderClick: () -&gt; Unit, onFileClick: () -&gt; Unit, onDownload: () -&gt; Unit, onDelete: () -&gt; Unit, onLongClick: () -&gt; Unit, onToggleSelect: () -&gt; Unit, onShowDetails: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:GalleryScanner.kt$GalleryScanner$( context: Context, profileName: String, bucket: String, s3Prefix: String, enabledFolders: List&lt;String&gt;, db: SyncDatabase, )</ID>
+    <ID>LongParameterList:S3Repository.kt$S3Repository$( key: String, inputStream: InputStream, contentType: String?, totalSize: Long, metadata: Map&lt;String, String&gt;? = null, onProgress: (bytesTransferred: Long) -&gt; Unit, )</ID>
+    <ID>LongParameterList:S3Repository.kt$S3Repository$( key: String, inputStream: InputStream, contentType: String?, totalSize: Long, partSizeBytes: Long = 5L * 1024 * 1024, metadata: Map&lt;String, String&gt;? = null, onPartCompleted: (partNumber: Int, completedPartsCount: Int, bytesTransferred: Long) -&gt; Unit, )</ID>
+    <ID>LongParameterList:SettingsScreen.kt$( settingsManager: SettingsManager, currentProfileName: String?, snackbarHostState: SnackbarHostState, onSaveSuccess: () -&gt; Unit, onThemeModeChanged: (String) -&gt; Unit, onNavigateToGallerySync: () -&gt; Unit = {}, currentSection: SettingsSection = SettingsSection.Menu, onSectionChanged: (SettingsSection) -&gt; Unit = {}, modifier: Modifier = Modifier, )</ID>
+    <ID>LongParameterList:TransferQueueScreen.kt$( batch: BatchGroup, onPause: (() -&gt; Unit)?, onResume: (() -&gt; Unit)?, onCancel: (() -&gt; Unit)?, onRetryFailed: (() -&gt; Unit)?, onRemove: (() -&gt; Unit)?, )</ID>
+    <ID>LoopWithTooManyJumpStatements:GalleryContentObserver.kt$GalleryContentObserver$for</ID>
+    <ID>LoopWithTooManyJumpStatements:GallerySyncTracker.kt$GallerySyncTracker$for</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFF00BCD4</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFF1DB954</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFF2196F3</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFF607D8B</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFF9C27B0</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFFE91E63</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$0xFFFF9800</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$1000</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$500L</ID>
+    <ID>MagicNumber:AudioPreviewDialog.kt$60</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$0xFF</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$10</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$11</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$12</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$16</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$24</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$3</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$4</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$7</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$8</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption$9</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$0xFF</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$16</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$24</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$4</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$5</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$6</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$7</ID>
+    <ID>MagicNumber:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$8</ID>
+    <ID>MagicNumber:EncryptionManager.kt$EncryptionManager$8</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF00ACC1</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF1E88E5</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF43A047</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF546E7A</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF5C6BC0</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF66BB6A</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF7E57C2</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFF9E9E9E</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFFE53935</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFFEC407A</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFFFB8C00</ID>
+    <ID>MagicNumber:FileListScreen.kt$0xFFFDD835</ID>
+    <ID>MagicNumber:FileListScreen.kt$5</ID>
+    <ID>MagicNumber:FileListScreen.kt$&lt;no name provided&gt;$500</ID>
+    <ID>MagicNumber:GallerySyncScheduler.kt$GallerySyncScheduler$6</ID>
+    <ID>MagicNumber:GallerySyncWorker.kt$GallerySyncWorker$500</ID>
+    <ID>MagicNumber:RetryPolicy.kt$RetryPolicy$4</ID>
+    <ID>MagicNumber:S3Config.kt$S3Config$4</ID>
+    <ID>MagicNumber:S3Config.kt$S3Config$8</ID>
+    <ID>MagicNumber:S3Repository.kt$S3FileItem$1024</ID>
+    <ID>MagicNumber:S3Repository.kt$S3Repository$1024</ID>
+    <ID>MagicNumber:S3Repository.kt$S3Repository$5L</ID>
+    <ID>MagicNumber:SettingsManager.kt$SettingsManager$4</ID>
+    <ID>MagicNumber:SettingsManager.kt$SettingsManager$8</ID>
+    <ID>MagicNumber:SettingsScreen.kt$100</ID>
+    <ID>MagicNumber:SettingsScreen.kt$200</ID>
+    <ID>MagicNumber:SettingsScreen.kt$50</ID>
+    <ID>MagicNumber:SettingsScreen.kt$500</ID>
+    <ID>MagicNumber:Theme.kt$0xFF004D40</ID>
+    <ID>MagicNumber:Theme.kt$0xFF00897B</ID>
+    <ID>MagicNumber:Theme.kt$0xFF0D47A1</ID>
+    <ID>MagicNumber:Theme.kt$0xFF121212</ID>
+    <ID>MagicNumber:Theme.kt$0xFF1565C0</ID>
+    <ID>MagicNumber:Theme.kt$0xFF1976D2</ID>
+    <ID>MagicNumber:Theme.kt$0xFF1E1E1E</ID>
+    <ID>MagicNumber:Theme.kt$0xFF80CBC4</ID>
+    <ID>MagicNumber:Theme.kt$0xFF90CAF9</ID>
+    <ID>MagicNumber:Theme.kt$0xFFBBDEFB</ID>
+    <ID>MagicNumber:Theme.kt$0xFFF5F5F5</ID>
+    <ID>MagicNumber:TransferManager.kt$TransferManager$15</ID>
+    <ID>MagicNumber:TransferManager.kt$TransferManager$3</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF00ACC1</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF1E88E5</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF43A047</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF546E7A</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF66BB6A</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF7E57C2</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFF9E9E9E</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFFE53935</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFFEC407A</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFFFB8C00</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFFFDD835</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$0xFFFFA000</ID>
+    <ID>MagicNumber:TransferQueueScreen.kt$100</ID>
+    <ID>MagicNumber:TransferService.kt$TransferService$100</ID>
+    <ID>MagicNumber:ZoomableImage.kt$0.5f</ID>
+    <ID>MagicNumber:ZoomableImage.kt$5f</ID>
+    <ID>MaxLineLength:FileDetailsContractTest.kt$FileDetailsContractTest$coEvery { anyConstructed&lt;S3Repository&gt;().listFilesPaged(any(), any(), any()) } returns PagedResult(listOf(folder, file), null)</ID>
+    <ID>MaxLineLength:FileDetailsContractTest.kt$FileDetailsContractTest$private val file = S3FileItem("documentos/relatorio-com-nome-completo-para-conferencia.txt", 1536, "2026-10-17T12:30:00Z")</ID>
+    <ID>MaxLineLength:FileListScreen.kt$Toast.makeText(context, "Download iniciado: ${filesToDownload.size} arquivo(s)", Toast.LENGTH_SHORT).show()</ID>
+    <ID>MaxLineLength:FileListScreen.kt$Toast.makeText(context, "Exclusão iniciada: ${filesToDelete.size} arquivo(s)", Toast.LENGTH_SHORT).show()</ID>
+    <ID>MaxLineLength:FileListScreen.kt$text = { Text("Deseja excluir os $count itens selecionados? Esta ação não pode ser desfeita.\n\nO progresso será exibido na aba de transferências.") }</ID>
+    <ID>MaxLineLength:FileListScreen.kt$tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$helpText = "O prefixo é a \"pasta raiz\" dentro do bucket onde os arquivos serão salvos. A estrutura final será: prefixo/NomeDaPasta/arquivo.jpg. Por exemplo, com prefixo \"galeria\": galeria/Camera/IMG_001.jpg, galeria/Screenshots/Screenshot_01.png. Não use barras no início ou fim — elas são removidas automaticamente."</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$helpText = "Quando ativada, a sincronização roda automaticamente a cada 6 horas (respeitando a opção de Wi-Fi). Novas fotos são detectadas em tempo real e enviadas em até 30 segundos. A sincronização continua mesmo com o app fechado."</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$helpText = "Quando ativado, a sincronização só acontece em redes Wi-Fi, evitando consumo do plano de dados móveis. Recomendado manter ativado, especialmente para galerias com muitos vídeos."</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$helpText = "Selecione o bucket S3 onde as fotos e vídeos serão enviados. Pode ser o mesmo bucket usado para arquivos manuais ou um bucket separado dedicado ao backup da galeria. Os buckets disponíveis são os cadastrados no perfil atual."</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$helpText = "Selecione quais pastas da galeria do celular serão sincronizadas com o S3. Cada pasta selecionada será replicada como um diretório dentro do prefixo configurado. Apenas fotos e vídeos são incluídos."</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$text = "${enabledFolders.size} de ${galleryFolders.size} selecionada${if (enabledFolders.size != 1) "s" else ""}"</ID>
+    <ID>MaxLineLength:GallerySyncScreen.kt$text = "Sincronize automaticamente fotos e vídeos da galeria para o S3. Funciona como backup — deletar do celular não remove do S3."</ID>
+    <ID>MaxLineLength:MainActivity.kt$MainActivity$BackHandler</ID>
+    <ID>MaxLineLength:MainActivity.kt$MainActivity$imageVector = if (isGridView) Icons.Filled.ViewList else Icons.Filled.GridView</ID>
+    <ID>MaxLineLength:MainActivity.kt$MainActivity$lockNotice.value = "Este aparelho não tem bloqueio de tela. Defina um PIN, padrão ou biometria nas configurações do Android, ou desative a trava do app."</ID>
+    <ID>MaxLineLength:MainActivity.kt$MainActivity$text = if (itemsHasMore) "Exibindo $itemCount itens..." else "Exibindo todos os $itemCount itens"</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$description = if (currentProfileName != null &amp;&amp; settingsManager.isGallerySyncEnabled(currentProfileName)) "Ativa" else "Desativada"</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$helpText = "A região AWS onde seu bucket S3 está localizado (ex: us-east-1, sa-east-1). Escolha a região mais próxima de você para melhor performance. Verifique no console do S3 em qual região o bucket foi criado."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$helpText = "Buckets são os \"contêineres\" de armazenamento do S3. Cada bucket tem um nome único global. Adicione aqui os buckets que deseja acessar com este perfil. O nome AWS deve ser exato; o nome de exibição é como ele aparecerá no app."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$helpText = "Configurações de proteção do app e dos seus arquivos. A biometria protege o acesso ao app. A criptografia AES-256-GCM protege o conteúdo dos arquivos antes do envio ao S3 — mesmo que alguém acesse seu bucket, não conseguirá ler os arquivos sem a chave."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$helpText = "Define quantos arquivos são carregados por vez ao navegar pelas pastas do bucket. Valores menores carregam mais rápido, mas exigem mais paginação. Valores maiores mostram mais arquivos de uma vez, mas podem demorar mais em conexões lentas."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$helpText = "Escolha entre tema claro, escuro ou automático (segue a configuração do sistema). Em dispositivos com Android 12+, as cores do app se adaptam automaticamente ao papel de parede."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$helpText = "Insira as credenciais IAM da sua conta AWS. Você pode criar um usuário IAM no console AWS (IAM &gt; Users &gt; Create User) e gerar um Access Key ID e Secret Access Key. Essas credenciais são armazenadas de forma criptografada no dispositivo."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$text = "Nenhuma opção de segurança disponível. Configure um perfil e/ou defina um bloqueio de tela (PIN, padrão ou biometria) no dispositivo."</ID>
+    <ID>MaxLineLength:SettingsScreen.kt$visualTransformation = if (showSecret &amp;&amp; secretKeyEdited) VisualTransformation.None else PasswordVisualTransformation()</ID>
+    <ID>MaxLineLength:TransferItem.kt$TransferItem$get() = state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING, TransferState.RETRYING, TransferState.QUEUED)</ID>
+    <ID>MaxLineLength:TransferManager.kt$TransferManager$TransferType.DOWNLOAD -&gt; executeDownload(item, effectiveConfig, context, settingsManager, profileName)</ID>
+    <ID>MaxLineLength:TransferManager.kt$TransferManager$if</ID>
+    <ID>MaxLineLength:TransferQueueScreen.kt$BatchGroup$get() = items.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING) }</ID>
+    <ID>MaxLineLength:TransferQueueScreen.kt$if</ID>
+    <ID>MaxLineLength:TransferQueueScreen.kt${ TransferManager.retryFailedInBatch(batch.batchId, config, context, settingsManager, profileName) }</ID>
+    <ID>MaxLineLength:TransferService.kt$TransferService$val</ID>
+    <ID>MaxLineLength:TransferService.kt$TransferService$val currentFile = batchItems.find { it.state in setOf(TransferState.UPLOADING, TransferState.DOWNLOADING, TransferState.DELETING) }</ID>
+    <ID>ModifierMissing:AudioPreviewDialog.kt$AudioPreviewDialog</ID>
+    <ID>ModifierMissing:ImageGalleryDialog.kt$ImageGalleryDialog</ID>
+    <ID>ModifierMissing:ImagePreviewDialog.kt$ImagePreviewDialog</ID>
+    <ID>ModifierMissing:PdfPreviewDialog.kt$PdfPreviewDialog</ID>
+    <ID>ModifierMissing:VideoPreviewDialog.kt$VideoPreviewDialog</ID>
+    <ID>ModifierReused:TransferQueueScreen.kt$Box( modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center, ) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon( Icons.Filled.SwapVert, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant, ) Spacer(modifier = Modifier.height(16.dp)) Text( "Nenhuma transferência", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, ) } }</ID>
+    <ID>ModifierReused:TransferQueueScreen.kt$LazyColumn( modifier = modifier .fillMaxSize() .padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), ) { if (activeBatches.isNotEmpty()) { item { SectionHeader("Em andamento (${activeBatches.size})") } items(activeBatches, key = { it.batchId }) { batch -&gt; BatchCard( batch = batch, onPause = { TransferManager.pauseBatch(batch.batchId) }, onResume = if (config != null) { { TransferManager.resumeBatch(batch.batchId, config, context, settingsManager, profileName) } } else null, onCancel = { TransferManager.cancelBatch(batch.batchId) }, onRetryFailed = null, onRemove = null, ) } } if (completedBatches.isNotEmpty()) { item { SectionHeader("Concluídos (${completedBatches.size})") } items(completedBatches, key = { it.batchId }) { batch -&gt; BatchCard( batch = batch, onPause = null, onResume = null, onCancel = null, onRetryFailed = null, onRemove = { TransferManager.removeBatch(batch.batchId) }, ) } } if (failedBatches.isNotEmpty()) { item { SectionHeader("Falhas (${failedBatches.size})") } items(failedBatches, key = { it.batchId }) { batch -&gt; BatchCard( batch = batch, onPause = null, onResume = null, onCancel = null, onRetryFailed = if (batch.state == BatchState.HAS_FAILURES &amp;&amp; config != null) { { TransferManager.retryFailedInBatch(batch.batchId, config, context, settingsManager, profileName) } } else null, onRemove = { TransferManager.removeBatch(batch.batchId) }, ) } } item { Spacer(modifier = Modifier.height(8.dp)) } }</ID>
+    <ID>NestedBlockDepth:S3Repository.kt$S3Repository$suspend fun uploadMultipart( key: String, inputStream: InputStream, contentType: String?, totalSize: Long, partSizeBytes: Long = 5L * 1024 * 1024, metadata: Map&lt;String, String&gt;? = null, onPartCompleted: (partNumber: Int, completedPartsCount: Int, bytesTransferred: Long) -&gt; Unit, )</ID>
+    <ID>NestedBlockDepth:TransferManager.kt$TransferManager$private suspend fun executeUpload( item: TransferItem, config: S3Config, context: Context, settingsManager: SettingsManager? = null, profileName: String? = null, )</ID>
+    <ID>ReturnCount:AppLockAuth.kt$AppLockAuth$fun plan(sdkInt: Int, strong: Int, credential: Int, combined: Int): Plan</ID>
+    <ID>ReturnCount:ChunkedEncryption.kt$ChunkedEncryption.EncryptingInputStream$override fun read(b: ByteArray, off: Int, len: Int): Int</ID>
+    <ID>ReturnCount:FileNames.kt$FileNames$fun sanitize(raw: String?): String?</ID>
+    <ID>ReturnCount:GallerySyncWorker.kt$GallerySyncWorker$override suspend fun doWork(): Result</ID>
+    <ID>ReturnCount:SettingsManager.kt$SettingsManager$fun getBuckets(profileName: String): List&lt;BucketEntry&gt;</ID>
+    <ID>ReturnCount:SettingsManager.kt$SettingsManager$fun getMaskedAccessKey(profileName: String? = null): String?</ID>
+    <ID>ReturnCount:SettingsManager.kt$SettingsManager$private fun migrateLegacyConfig()</ID>
+    <ID>ReturnCount:SettingsManager.kt$SettingsManager$private fun readProfileConfig(name: String): S3Config?</ID>
+    <ID>ReturnCount:TransferQueueScreen.kt$private fun getBatchIcon(batch: BatchGroup): ImageVector</ID>
+    <ID>ReturnCount:TransferQueueScreen.kt$private fun getBatchIconColor(batch: BatchGroup): Color</ID>
+    <ID>SwallowedException:TransferManager.kt$TransferManager$e: CancellationException</ID>
+    <ID>ThrowsCount:ChunkedEncryption.kt$ChunkedEncryption$fun decrypt(input: InputStream, output: OutputStream, key: SecretKey)</ID>
+    <ID>ThrowsCount:DownloadsStore.kt$DownloadsStore$@RequiresApi(Build.VERSION_CODES.Q) private fun publishScoped(context: Context, source: File, name: String)</ID>
+    <ID>ThrowsCount:DownloadsStore.kt$DownloadsStore$@Suppress("DEPRECATION") private fun publishLegacy(source: File, name: String)</ID>
+    <ID>ThrowsCount:S3Repository.kt$S3Repository$suspend fun uploadMultipart( key: String, inputStream: InputStream, contentType: String?, totalSize: Long, partSizeBytes: Long = 5L * 1024 * 1024, metadata: Map&lt;String, String&gt;? = null, onPartCompleted: (partNumber: Int, completedPartsCount: Int, bytesTransferred: Long) -&gt; Unit, )</ID>
+    <ID>TooGenericExceptionCaught:AudioPreviewDialog.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:DownloadsStore.kt$DownloadsStore$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FileListScreen.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImageGalleryDialog.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImagePreviewDialog.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PdfPreviewDialog.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:S3Repository.kt$S3Repository$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:TransferManager.kt$TransferManager$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:VideoPreviewDialog.kt$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:S3Repository.kt$S3Repository$throw Exception("Arquivo vazio ou nao encontrado")</ID>
+    <ID>TooGenericExceptionThrown:S3Repository.kt$S3Repository$throw Exception("Falha ao iniciar multipart upload")</ID>
+    <ID>TooGenericExceptionThrown:TransferManager.kt$TransferManager$throw Exception("Nao foi possivel ler o arquivo")</ID>
+    <ID>TooManyFunctions:S3Repository.kt$S3Repository</ID>
+    <ID>TooManyFunctions:SettingsManager.kt$SettingsManager</ID>
+    <ID>TooManyFunctions:SyncedFileDao.kt$SyncedFileDao</ID>
+    <ID>TooManyFunctions:TransferManager.kt$TransferManager</ID>
+    <ID>UnstableCollections:BucketListScreen.kt$List&lt;BucketEntry&gt;</ID>
+    <ID>UnstableCollections:GallerySyncScreen.kt$List&lt;BucketEntry&gt;</ID>
+    <ID>UnstableCollections:ImageGalleryDialog.kt$List&lt;S3FileItem&gt;</ID>
+    <ID>UseCheckOrError:S3Repository.kt$S3Repository$throw IllegalStateException("Arquivo criptografado: chave de criptografia indisponivel neste perfil")</ID>
+    <ID>UseCheckOrError:S3Repository.kt$S3Repository$throw IllegalStateException("O tamanho do arquivo mudou durante o upload")</ID>
+    <ID>UseRequire:FileNames.kt$FileNames$throw IllegalArgumentException("Caminho de destino invalido")</ID>
+    <ID>WildcardImport:FileDetailsContractTest.kt$import androidx.compose.ui.test.*</ID>
+    <ID>WildcardImport:FileDetailsContractTest.kt$import io.mockk.*</ID>
+    <ID>WildcardImport:FileDetailsContractTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:TransferFailuresContractTest.kt$import androidx.compose.ui.test.*</ID>
+    <ID>WildcardImport:TransferFailuresContractTest.kt$import io.mockk.*</ID>
+  </CurrentIssues>
+</SmellBaseline>
