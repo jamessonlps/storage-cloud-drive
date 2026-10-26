@@ -43,9 +43,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -205,6 +209,8 @@ private fun BatchCard(
     onRetryFailed: (() -> Unit)?,
     onRemove: (() -> Unit)?,
 ) {
+    var showFailures by rememberSaveable { mutableStateOf(false) }
+
     val statusColor = when (batch.state) {
         BatchState.COMPLETED -> Color(0xFF43A047)
         BatchState.HAS_FAILURES -> MaterialTheme.colorScheme.error
@@ -356,6 +362,24 @@ private fun BatchCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+
+            // Offered for any batch with a FAILED item, even while other items are still active
+            if (batch.failedCount > 0) {
+                TextButton(
+                    onClick = { showFailures = true },
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text("Ver falhas")
+                }
+            }
+            if (showFailures) {
+                TransferFailuresDialog(
+                    failedItems = TransferFailuresSnapshot(
+                        batch.items.filter { it.state == TransferState.FAILED },
+                    ),
+                    onDismiss = { showFailures = false },
+                )
             }
         }
     }
