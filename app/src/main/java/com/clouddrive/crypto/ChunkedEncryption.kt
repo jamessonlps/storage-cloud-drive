@@ -44,6 +44,7 @@ object ChunkedEncryption {
     /** Size of the encrypted output for [plainSize] plaintext bytes (needed up front by multipart upload). */
     fun encryptedSize(plainSize: Long, chunkSize: Int = DEFAULT_CHUNK_SIZE): Long {
         require(plainSize >= 0) { "plainSize negativo" }
+        require(chunkSize in 1..MAX_CHUNK_SIZE) { "chunkSize invalido" }
         val chunks = maxOf(1L, (plainSize + chunkSize - 1) / chunkSize)
         return HEADER_SIZE + plainSize + chunks * TAG_BYTES
     }
