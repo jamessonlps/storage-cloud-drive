@@ -55,9 +55,9 @@ object S3ClientProvider {
             if (currentKey == key) return existing
         }
 
-        currentClient?.close()
-
         val client = clientFactory(config)
+
+        currentClient?.close()
 
         currentClient = client
         currentKey = key
