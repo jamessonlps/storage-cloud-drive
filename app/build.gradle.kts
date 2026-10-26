@@ -3,6 +3,13 @@ import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import javax.xml.XMLConstants
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
+import org.w3c.dom.Element
 
 plugins {
     id("com.android.application")
@@ -161,16 +168,61 @@ val prepareReleaseUnitTestRobolectricResources = tasks.register("prepareReleaseU
         check(testManifest.parentFile.mkdirs() || testManifest.parentFile.isDirectory) {
             "Could not create releaseUnitTest manifest directory: ${testManifest.parentFile}"
         }
-        testManifest.writeText(
-            """<?xml version="1.0" encoding="utf-8"?>
-                |<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="$releaseUnitTestApplicationId">
-                |    <uses-sdk android:minSdkVersion="$releaseUnitTestMinSdk" android:targetSdkVersion="$releaseUnitTestTargetSdk" />
-                |    <application>
-                |        <activity android:name="androidx.activity.ComponentActivity" android:exported="true" />
-                |    </application>
-                |</manifest>
-                |""".trimMargin()
-        )
+        val androidNamespace = "http://schemas.android.com/apk/res/android"
+        val documentBuilder = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        }.newDocumentBuilder()
+        val productionManifestFile = project.file("src/main/AndroidManifest.xml")
+        check(productionManifestFile.isFile) { "Missing production manifest: $productionManifestFile" }
+        val productionManifest = documentBuilder.parse(productionManifestFile)
+        val productionPackage = productionManifest.documentElement.getAttribute("package").ifBlank {
+            android.namespace ?: error("Production namespace is required")
+        }
+        fun qualifiedActivityName(name: String): String = when {
+            name.startsWith(".") -> productionPackage + name
+            name.contains(".") -> name
+            else -> "$productionPackage.$name"
+        }
+        val activities = productionManifest.getElementsByTagName("activity")
+        val mainActivities = (0 until activities.length).map { activities.item(it) as Element }.filter {
+            qualifiedActivityName(it.getAttributeNS(androidNamespace, "name")) == "$productionPackage.MainActivity"
+        }
+        check(mainActivities.size == 1) { "Expected one production MainActivity declaration" }
+        val mainActivity = mainActivities.single()
+        val mainActivityExported = mainActivity.getAttributeNS(androidNamespace, "exported")
+        check(mainActivityExported in setOf("true", "false")) { "MainActivity must declare exported explicitly" }
+
+        // Only generated test resources receive these declarations; production stays unchanged.
+        val testDocument = documentBuilder.newDocument()
+        val manifestElement = testDocument.createElement("manifest").apply {
+            setAttributeNS(XMLConstants.XMLNS_ATTRIBUTE_NS_URI, "xmlns:android", androidNamespace)
+            setAttribute("package", releaseUnitTestApplicationId)
+        }
+        testDocument.appendChild(manifestElement)
+        val permissions = productionManifest.documentElement.getElementsByTagName("uses-permission")
+        for (index in 0 until permissions.length) {
+            manifestElement.appendChild(testDocument.importNode(permissions.item(index), true))
+        }
+        manifestElement.appendChild(testDocument.createElement("uses-sdk").apply {
+            setAttributeNS(androidNamespace, "android:minSdkVersion", releaseUnitTestMinSdk.toString())
+            setAttributeNS(androidNamespace, "android:targetSdkVersion", releaseUnitTestTargetSdk.toString())
+        })
+        val applicationElement = testDocument.createElement("application")
+        manifestElement.appendChild(applicationElement)
+        applicationElement.appendChild(testDocument.createElement("activity").apply {
+            setAttributeNS(androidNamespace, "android:name", "androidx.activity.ComponentActivity")
+            setAttributeNS(androidNamespace, "android:exported", "true")
+        })
+        applicationElement.appendChild(testDocument.createElement("activity").apply {
+            setAttributeNS(androidNamespace, "android:name",
+                qualifiedActivityName(mainActivity.getAttributeNS(androidNamespace, "name")))
+            setAttributeNS(androidNamespace, "android:exported", mainActivityExported)
+        })
+        TransformerFactory.newInstance().newTransformer().apply {
+            setOutputProperty(OutputKeys.ENCODING, "utf-8")
+            setOutputProperty(OutputKeys.INDENT, "yes")
+        }.transform(DOMSource(testDocument), StreamResult(testManifest))
 
         val androidJar = releaseUnitTestSdkDirectory.resolve("platforms/android-$releaseUnitTestCompileSdk/android.jar")
         val aapt2 = releaseUnitTestSdkDirectory.resolve("build-tools/$releaseUnitTestBuildTools/aapt2")
